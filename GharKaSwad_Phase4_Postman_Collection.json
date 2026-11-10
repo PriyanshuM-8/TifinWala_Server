@@ -1,0 +1,382 @@
+{
+  "info": {
+    "name": "GharKaSwad - Phase 4: Customer Address & Location Management",
+    "_postman_id": "gharkaswad-phase4-address-management",
+    "description": "Comprehensive Postman test collection for Phase 4 covering all 20 testing scenarios: Customer Address Creation, Automatic Default Designation, Multiple Addresses, Updates, Default Switching, Smart Deletion with Reassignment, Security/Cross-Customer Isolation, and Strict Validations.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5001",
+      "type": "string"
+    },
+    {
+      "key": "customerToken", 
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "otherCustomerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "addressId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "secondAddressId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Part A - Address Creation & Default Rules",
+      "item": [
+        {
+          "name": "1. Customer adds first address",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Priyanshu Sharma\",\n  \"phone\": \"9876543210\",\n  \"addressType\": \"home\",\n  \"addressLine\": \"Flat 402, Royal Residency, Sector 62\",\n  \"landmark\": \"Near Fortis Hospital\",\n  \"city\": \"Noida\",\n  \"state\": \"Uttar Pradesh\",\n  \"pincode\": \"201301\",\n  \"location\": {\n    \"type\": \"Point\",\n    \"coordinates\": [77.3649, 28.6280]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses"]
+            }
+          }
+        },
+        {
+          "name": "2. First address automatically becomes default (Verify)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses/{{addressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses", "{{addressId}}"]
+            }
+          }
+        },
+        {
+          "name": "3. Customer adds second address (non-default)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Priyanshu Office\",\n  \"phone\": \"9876543210\",\n  \"addressType\": \"office\",\n  \"addressLine\": \"Tower B, 7th Floor, Cyber City DLF Phase 2\",\n  \"landmark\": \"Cyber Hub Gate 3\",\n  \"city\": \"Gurugram\",\n  \"state\": \"Haryana\",\n  \"pincode\": \"122002\",\n  \"location\": {\n    \"coordinates\": [77.0878, 28.4906]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Part B - Address Queries & Management",
+      "item": [
+        {
+          "name": "4. Customer views all addresses",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses"]
+            }
+          }
+        },
+        {
+          "name": "5. Customer views address by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses/{{secondAddressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses", "{{secondAddressId}}"]
+            }
+          }
+        },
+        {
+          "name": "6. Customer updates address",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"landmark\": \"Opposite Cyber Hub Metro Station\",\n  \"addressLine\": \"Tower C, 9th Floor, Cyber City DLF Phase 2\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses/{{secondAddressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses", "{{secondAddressId}}"]
+            }
+          }
+        },
+        {
+          "name": "7. Customer sets another address as default",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses/{{secondAddressId}}/default",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses", "{{secondAddressId}}", "default"]
+            }
+          }
+        },
+        {
+          "name": "8. Previous default address becomes non-default (Verify)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses/{{addressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses", "{{addressId}}"]
+            }
+          }
+        },
+        {
+          "name": "9. Customer deletes an address",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses/{{addressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses", "{{addressId}}"]
+            }
+          }
+        },
+        {
+          "name": "10. Default address deletion with another address available",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses/{{secondAddressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses", "{{secondAddressId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Part C - Security & Access Control",
+      "item": [
+        {
+          "name": "11. Customer attempts to access another customer's address (403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{otherCustomerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses/{{addressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses", "{{addressId}}"]
+            }
+          }
+        },
+        {
+          "name": "12. Customer attempts to update another customer's address (403)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{otherCustomerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Hacker Attack\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses/{{addressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses", "{{addressId}}"]
+            }
+          }
+        },
+        {
+          "name": "13. Customer attempts to delete another customer's address (403)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{otherCustomerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses/{{addressId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses", "{{addressId}}"]
+            }
+          }
+        },
+        {
+          "name": "19. Customer attempts to send another userId (Ignored)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"660c1234567890abcdef1234\",\n  \"fullName\": \"Tamper Test\",\n  \"phone\": \"9876543210\",\n  \"addressType\": \"home\",\n  \"addressLine\": \"Secure Way 10\",\n  \"city\": \"Delhi\",\n  \"state\": \"Delhi\",\n  \"pincode\": \"110001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Part D - Input Validation & Edge Cases",
+      "item": [
+        {
+          "name": "14. Invalid address ID (400)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses/invalid-mongo-id-123",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses", "invalid-mongo-id-123"]
+            }
+          }
+        },
+        {
+          "name": "15. Missing required fields (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Incomplete Person\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses"]
+            }
+          }
+        },
+        {
+          "name": "16. Invalid phone number (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Test User\",\n  \"phone\": \"12345\",\n  \"addressType\": \"home\",\n  \"addressLine\": \"House 12, Road 4\",\n  \"city\": \"Delhi\",\n  \"state\": \"Delhi\",\n  \"pincode\": \"110001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses"]
+            }
+          }
+        },
+        {
+          "name": "17. Invalid pincode (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Test User\",\n  \"phone\": \"9876543210\",\n  \"addressType\": \"home\",\n  \"addressLine\": \"House 12, Road 4\",\n  \"city\": \"Delhi\",\n  \"state\": \"Delhi\",\n  \"pincode\": \"999\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses"]
+            }
+          }
+        },
+        {
+          "name": "18. Invalid longitude or latitude (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Test User\",\n  \"phone\": \"9876543210\",\n  \"addressType\": \"home\",\n  \"addressLine\": \"House 12, Road 4\",\n  \"city\": \"Delhi\",\n  \"state\": \"Delhi\",\n  \"pincode\": \"110001\",\n  \"location\": {\n    \"coordinates\": [250.0, 95.0]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses"]
+            }
+          }
+        },
+        {
+          "name": "20. Customer with no saved addresses (200 empty)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{otherCustomerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/customer/addresses",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "customer", "addresses"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,490 @@
+{
+  "info": {
+    "name": "GharKaSwad - Phase 3: Category & Food Management",
+    "_postman_id": "gharkaswad-phase3-complete-v2",
+    "description": "Comprehensive Postman Collection for GharKaSwad Phase 3: Food Category Management, Chef Food Management, Custom Tags, Multer/Cloudinary Uploads, and Customer Food Browsing.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5001",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "chefToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "categoryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "foodId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "chefId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Part A - Admin Category Management",
+      "item": [
+        {
+          "name": "1. Admin Creates Breakfast Category",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Breakfast\",\n  \"slug\": \"breakfast\",\n  \"description\": \"Fresh and nutritious homemade morning breakfast items like poha, upma, and stuffed parathas.\",\n  \"isActive\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/categories", "host": ["{{baseUrl}}"], "path": ["api", "admin", "categories"] }
+          }
+        },
+        {
+          "name": "2. Admin Creates Lunch Category (with Image Upload via form-data)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Lunch", "type": "text" },
+                { "key": "description", "value": "Wholesome, balanced afternoon thalis and meals prepared with love.", "type": "text" },
+                { "key": "isActive", "value": "true", "type": "text" },
+                { "key": "image", "type": "file", "description": "Select a JPEG, PNG, or WebP image under 5MB" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/categories", "host": ["{{baseUrl}}"], "path": ["api", "admin", "categories"] }
+          }
+        },
+        {
+          "name": "3. Admin Gets All Categories",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "categories"],
+              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }]
+            }
+          }
+        },
+        {
+          "name": "4. Admin Gets Category By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["api", "admin", "categories", "{{categoryId}}"] }
+          }
+        },
+        {
+          "name": "5. Admin Updates Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated description: Homely afternoon meals made with fresh ingredients.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["api", "admin", "categories", "{{categoryId}}"] }
+          }
+        },
+        {
+          "name": "6. Admin Deactivates Category",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/categories/{{categoryId}}/status", "host": ["{{baseUrl}}"], "path": ["api", "admin", "categories", "{{categoryId}}", "status"] }
+          }
+        },
+        {
+          "name": "7. Admin Reactivates Category",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/admin/categories/{{categoryId}}/status", "host": ["{{baseUrl}}"], "path": ["api", "admin", "categories", "{{categoryId}}", "status"] }
+          }
+        },
+        {
+          "name": "8. Admin Deletes Category",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["api", "admin", "categories", "{{categoryId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Part B - Public Categories",
+      "item": [
+        {
+          "name": "9. Customer Views Active Categories (No Auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/categories", "host": ["{{baseUrl}}"], "path": ["api", "categories"] }
+          }
+        }
+      ]
+    },
+
+
+    
+    {
+      "name": "Part C - Chef Food Management",
+      "item": [
+        {
+          "name": "10. Chef Creates Food with Custom Tags & Multipart Image",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "categoryId", "value": "{{categoryId}}", "type": "text" },
+                { "key": "name", "value": "Homemade Paneer Thali", "type": "text" },
+                { "key": "description", "value": "Fresh paneer gravy served with 4 phulkas, jeera rice, dal tadka, and salad.", "type": "text" },
+                { "key": "price", "value": "180", "type": "text" },
+                { "key": "foodType", "value": "veg", "type": "text" },
+                { "key": "preparationTime", "value": "35", "type": "text" },
+                { "key": "availableQuantity", "value": "12", "type": "text" },
+                { "key": "tags", "value": "[\"homemade\", \"bihari-style\", \"less-spicy\", \"fresh-food\", \"traditional\"]", "type": "text" },
+                { "key": "ingredients", "value": "Paneer, Tomatoes, Cashew, Desi Ghee, Wheat Flour, Basmati Rice", "type": "text" },
+                { "key": "image", "type": "file", "description": "Select food image (JPG, PNG, WebP < 5MB)" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/api/chef/foods", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods"] }
+          }
+        },
+        {
+          "name": "11. Chef Creates Food (JSON Mode)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": \"{{categoryId}}\",\n  \"name\": \"Ghar Ka Desi Chicken Meal\",\n  \"description\": \"Tender chicken cooked with whole aromatic spices, served with fragrant basmati rice.\",\n  \"price\": 250,\n  \"foodType\": \"non_veg\",\n  \"preparationTime\": 45,\n  \"availableQuantity\": 8,\n  \"tags\": [\"homemade\", \"spicy\", \"chicken\", \"authentic\"],\n  \"ingredients\": [\"Chicken\", \"Onions\", \"Ginger\", \"Garlic\", \"Spices\", \"Rice\"],\n  \"availability\": \"available\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/chef/foods", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods"] }
+          }
+        },
+        {
+          "name": "12. Chef Views Own Foods",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/chef/foods?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods"] }
+          }
+        },
+        {
+          "name": "13. Chef Views Food By ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/chef/foods/{{foodId}}", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods", "{{foodId}}"] }
+          }
+        },
+        {
+          "name": "14. Chef Updates Food & Custom Tags",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 195,\n  \"availableQuantity\": 15,\n  \"tags\": [\"homemade\", \"bihari-style\", \"less-spicy\", \"chef-special\"]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/chef/foods/{{foodId}}", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods", "{{foodId}}"] }
+          }
+        },
+        {
+          "name": "15. Chef Replaces Food Image (form-data)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "image", "type": "file", "description": "New image file to replace previous Cloudinary image" }
+              ]
+            },
+            "url": { "raw": "{{baseUrl}}/api/chef/foods/{{foodId}}", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods", "{{foodId}}"] }
+          }
+        },
+        {
+          "name": "16. Chef Marks Food Unavailable",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"availability\": \"unavailable\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/chef/foods/{{foodId}}/availability", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods", "{{foodId}}", "availability"] }
+          }
+        },
+        {
+          "name": "17. Chef Marks Food Available",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"availability\": \"available\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/chef/foods/{{foodId}}/availability", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods", "{{foodId}}", "availability"] }
+          }
+        },
+        {
+          "name": "18. Chef Deletes Own Food",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/chef/foods/{{foodId}}", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods", "{{foodId}}"] }
+          }
+        }
+      ]
+    },
+
+
+    
+    {
+      "name": "Part D - Public Customer Food Browsing",
+      "item": [
+        {
+          "name": "19. Customer Browses All Available Foods",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/foods?page=1&limit=12&sort=newest", "host": ["{{baseUrl}}"], "path": ["api", "foods"] }
+          }
+        },
+        {
+          "name": "20. Customer Gets Food Details By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/foods/{{foodId}}", "host": ["{{baseUrl}}"], "path": ["api", "foods", "{{foodId}}"] }
+          }
+        },
+        {
+          "name": "21. Customer Filters By Category",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/foods/category/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["api", "foods", "category", "{{categoryId}}"] }
+          }
+        },
+        {
+          "name": "22. Customer Filters By Chef Kitchen",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/foods/chef/{{chefId}}", "host": ["{{baseUrl}}"], "path": ["api", "foods", "chef", "{{chefId}}"] }
+          }
+        },
+        {
+          "name": "23. Customer Searches By Name",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/foods?search=Paneer", "host": ["{{baseUrl}}"], "path": ["api", "foods"] }
+          }
+        },
+        {
+          "name": "24. Customer Filters Vegetarian Food",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/foods?foodType=veg", "host": ["{{baseUrl}}"], "path": ["api", "foods"] }
+          }
+        },
+        {
+          "name": "25. Customer Filters Non-Vegetarian Food",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/foods?foodType=non_veg", "host": ["{{baseUrl}}"], "path": ["api", "foods"] }
+          }
+        },
+        {
+          "name": "26. Customer Filters By Price Range",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/foods?minPrice=100&maxPrice=250", "host": ["{{baseUrl}}"], "path": ["api", "foods"] }
+          }
+        },
+        {
+          "name": "27. Customer Filters By Custom Tag (?tag=homemade)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/foods?tag=homemade", "host": ["{{baseUrl}}"], "path": ["api", "foods"] }
+          }
+        },
+        {
+          "name": "28. Customer Sorts By Ascending Price (?sort=price_asc)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/foods?sort=price_asc", "host": ["{{baseUrl}}"], "path": ["api", "foods"] }
+          }
+        },
+        {
+          "name": "29. Customer Sorts By Descending Price (?sort=price_desc)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/foods?sort=price_desc", "host": ["{{baseUrl}}"], "path": ["api", "foods"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Part E - Edge Cases & Security Checks",
+      "item": [
+        {
+          "name": "30. Chef Attempts to Update Another Chef's Food [403 Forbidden]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"price\": 50\n}" },
+            "url": { "raw": "{{baseUrl}}/api/chef/foods/{{foodId}}", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods", "{{foodId}}"] }
+          }
+        },
+        {
+          "name": "31. Pending Chef Attempts to Create Food [403 Forbidden]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": \"{{categoryId}}\",\n  \"name\": \"Pending Dish\",\n  \"description\": \"Must be rejected.\",\n  \"price\": 100,\n  \"foodType\": \"veg\",\n  \"preparationTime\": 20\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/chef/foods", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods"] }
+          }
+        },
+        {
+          "name": "32. Chef Submits Inactive Category [400 Bad Request]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": \"{{categoryId}}\",\n  \"name\": \"Dish with Inactive Category\",\n  \"description\": \"Must be rejected.\",\n  \"price\": 100,\n  \"foodType\": \"veg\",\n  \"preparationTime\": 20\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/chef/foods", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods"] }
+          }
+        },
+        {
+          "name": "33. Chef Submits More Than 10 Tags [400 Bad Request]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": \"{{categoryId}}\",\n  \"name\": \"Too Many Tags\",\n  \"description\": \"Must be rejected.\",\n  \"price\": 100,\n  \"foodType\": \"veg\",\n  \"preparationTime\": 20,\n  \"tags\": [\"t1\",\"t2\",\"t3\",\"t4\",\"t5\",\"t6\",\"t7\",\"t8\",\"t9\",\"t10\",\"t11\"]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/chef/foods", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods"] }
+          }
+        },
+        {
+          "name": "34. Chef Submits HTML/Script Tag [400 Bad Request]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": \"{{categoryId}}\",\n  \"name\": \"Script Tag\",\n  \"description\": \"Must be rejected.\",\n  \"price\": 100,\n  \"foodType\": \"veg\",\n  \"preparationTime\": 20,\n  \"tags\": [\"<script>alert(1)</script>\"]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/chef/foods", "host": ["{{baseUrl}}"], "path": ["api", "chef", "foods"] }
+          }
+        },
+        {
+          "name": "35. Admin Deletes Category With Linked Foods [400 Bad Request - Rule 4]",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/admin/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["api", "admin", "categories", "{{categoryId}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}

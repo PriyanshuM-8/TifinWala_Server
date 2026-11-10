@@ -1,0 +1,256 @@
+{
+  "info": {
+    "name": "GharKaSwad - Phase 2: Chef Profile & Admin Approval",
+    "_postman_id": "gharkaswad-phase2-v1",
+    "description": "Postman test collection for Phase 2: Chef Profile Management and Admin Approval System in GharKaSwad.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "chefToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "chefProfileId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Chef Views Own Profile",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/chef/profile",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "chef", "profile"]
+        }
+      }
+    },
+    {
+      "name": "2. Chef Updates Allowed Profile Fields",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{chefToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"description\": \"Pure homemade vegetarian thalis and festive Awadhi delicacies made with desi ghee.\",\n  \"foodCategories\": [\"Vegetarian\", \"Thali\", \"Jain Options\", \"Sweets\"],\n  \"cuisineTypes\": [\"North Indian\", \"Awadhi\"]\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/chef/profile",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "chef", "profile"]
+        } 
+      }
+    },
+    {
+      "name": "3. Chef Attempts to Change approvalStatus Directly (Should Fail 403)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{chefToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"approvalStatus\": \"approved\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/chef/profile",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "chef", "profile"]
+        }
+      }
+    },
+    {
+      "name": "4. Chef Views Approval Status",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/chef/approval-status",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "chef", "approval-status"]
+        }
+      }
+    },
+    {
+      "name": "5. Admin Lists Pending Chefs",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/chefs?status=pending&page=1&limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "chefs"],
+          "query": [
+            { "key": "status", "value": "pending" },
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "10" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "6. Admin Searches Chefs by Name/City/Email",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/chefs?search=Lucknow",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "chefs"],
+          "query": [
+            { "key": "search", "value": "Lucknow" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "7. Admin Views Specific Chef Details",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/chefs/{{chefProfileId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "chefs", "{{chefProfileId}}"]
+        }
+      }
+    },
+    {
+      "name": "8. Admin Approves a Pending Chef",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/chefs/{{chefProfileId}}/approve",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "chefs", "{{chefProfileId}}", "approve"]
+        }
+      }
+    },
+    {
+      "name": "9. Admin Rejects a Pending Chef with Reason",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"rejectionReason\": \"FSSAI certificate is unverified or expired. Please upload a clear valid certificate.\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/chefs/{{chefProfileId}}/reject",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "chefs", "{{chefProfileId}}", "reject"]
+        }
+      }
+    },
+    {
+      "name": "10. Admin Attempts to Approve Already Approved Chef (Should Fail 400)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/chefs/{{chefProfileId}}/approve",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "chefs", "{{chefProfileId}}", "approve"]
+        }
+      }
+    },
+    {
+      "name": "11. Customer Attempts to Access Admin APIs (Should Fail 403)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/chefs",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "chefs"]
+        }
+      }
+    },
+    {
+      "name": "12. Chef Attempts to Access Admin APIs (Should Fail 403)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/admin/chefs",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "admin", "chefs"]
+        }
+      }
+    },
+    {
+      "name": "13. Pending or Rejected Chef Attempts Operations (requireApprovedChef - Should Fail 403)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/chef/kitchen/operations",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "chef", "kitchen", "operations"]
+        }
+      }
+    },
+    {
+      "name": "14. Approved Chef Accesses Kitchen Operations (requireApprovedChef - Success 200)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{chefToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/chef/kitchen/operations",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "chef", "kitchen", "operations"]
+        }
+      }
+    }
+  ]
+}

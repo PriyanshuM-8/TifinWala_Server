@@ -1,0 +1,312 @@
+{
+  "info": {
+    "name": "GharKaSwad Authentication API",
+    "_postman_id": "gharkaswad-auth-v1",
+    "description": "Production-grade Authentication and Authorization endpoints for GharKaSwad (Ghar ka khana, apno jaisa sukoon).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Customer Registration - Send OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Priyanshu Verma\",\n  \"email\": \"priyanshu@example.com\",\n  \"phone\": \"9876543210\",\n  \"password\": \"CustomerPass@123\",\n  \"confirmPassword\": \"CustomerPass@123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/customer/register/send-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "customer", "register", "send-otp"]
+        }
+      }
+    },
+    {
+      "name": "2. Customer Registration - Verify OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"priyanshu@example.com\",\n  \"otp\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/customer/register/verify-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "customer", "register", "verify-otp"]
+        }
+      }
+    },
+    {
+      "name": "3. Chef Registration - Send OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Chef Anita Sharma\",\n  \"email\": \"chef.anita@example.com\",\n  \"phone\": \"9812345678\",\n  \"password\": \"ChefSecretPass@123\",\n  \"confirmPassword\": \"ChefSecretPass@123\",\n  \"kitchenName\": \"Maa Ki Rasoi\",\n  \"ownerName\": \"Anita Sharma\",\n  \"kitchenAddress\": \"Flat 402, Shanti Kunj, Gomti Nagar\",\n  \"city\": \"Lucknow\",\n  \"description\": \"Pure homemade vegetarian thalis and traditional Awadhi sweets.\",\n  \"foodCategories\": [\"Vegetarian\", \"Thali\", \"Sweets\"],\n  \"cuisineTypes\": [\"North Indian\", \"Awadhi\"],\n  \"foodSafetyDetails\": \"FSSAI Reg #22123456789012\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/chef/register/send-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "chef", "register", "send-otp"]
+        }
+      }
+    },
+    {
+      "name": "4. Chef Registration - Verify OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"chef.anita@example.com\",\n  \"otp\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/chef/register/verify-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "chef", "register", "verify-otp"]
+        }
+      }
+    },
+    {
+      "name": "5. Resend Registration OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"priyanshu@example.com\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/register/resend-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "register", "resend-otp"]
+        }
+      }
+    },
+    {
+      "name": "6. Customer Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"priyanshu@example.com\",\n  \"password\": \"CustomerPass@123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "7. Chef Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"chef.anita@example.com\",\n  \"password\": \"ChefSecretPass@123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "8. Admin Login (Dedicated)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@gharkaswad.com\",\n  \"password\": \"AdminSecurePass@2026\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/admin/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "admin", "login"]
+        }
+      }
+    },
+    {
+      "name": "9. Login with Invalid Password",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"priyanshu@example.com\",\n  \"password\": \"IncorrectPassword999\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "10. Verify with Invalid OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"priyanshu@example.com\",\n  \"otp\": \"000000\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/customer/register/verify-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "customer", "register", "verify-otp"]
+        }
+      }
+    },
+    {
+      "name": "11. Verify Expired OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"expired.user@example.com\",\n  \"otp\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/customer/register/verify-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "customer", "register", "verify-otp"]
+        }
+      }
+    },
+    {
+      "name": "12. Duplicate Email Registration",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Duplicate User\",\n  \"email\": \"priyanshu@example.com\",\n  \"phone\": \"9899999999\",\n  \"password\": \"ValidPass@123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/customer/register/send-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "customer", "register", "send-otp"]
+        }
+      }
+    },
+    {
+      "name": "13. Duplicate Phone Registration",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Duplicate Phone User\",\n  \"email\": \"brandnewemail@example.com\",\n  \"phone\": \"9876543210\",\n  \"password\": \"ValidPass@123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/customer/register/send-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "customer", "register", "send-otp"]
+        }
+      }
+    },
+    {
+      "name": "14. Public Admin Registration Attempt",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ], 
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Hacker Admin\",\n  \"email\": \"fakeadmin@example.com\",\n  \"phone\": \"9811122233\",\n  \"password\": \"HackedPass@123\",\n  \"role\": \"admin\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/customer/register/send-otp",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "customer", "register", "send-otp"]
+        }
+      }
+    },
+    {
+      "name": "15. Access /me without JWT",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "me"]
+        }
+      }
+    },
+    {
+      "name": "16. Access /me with Valid JWT",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "me"]
+        }
+      }
+    },
+    {
+      "name": "17. Logout",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/logout",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "logout"]
+        }
+      }
+    }
+  ]
+}
