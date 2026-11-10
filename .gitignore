@@ -1,7 +1,7 @@
 node_modules
 .env
-server/GharKaSwad_Auth_Postman_Collection.json
-server/GharKaSwad_Phase2_Postman_Collection.json
-server/GharKaSwad_Phase3_Postman_Collection.json
-server/GharKaSwad_Phase4_Postman_Collection.json
+GharKaSwad_Auth_Postman_Collection.json
+GharKaSwad_Phase2_Postman_Collection.json
+GharKaSwad_Phase3_Postman_Collection.json
+GharKaSwad_Phase4_Postman_Collection.json
 API.json
