@@ -7,7 +7,7 @@ import {
 } from "../controllers/chefController.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { authorizeRoles } from "../middleware/roleMiddleware.js";
-import { requireApprovedChef } from "../Middleware/requireApprovedChef.js";
+import { requireApprovedChef } from "../middleware/requireApprovedChef.js";
 
 const router = express.Router();
 
