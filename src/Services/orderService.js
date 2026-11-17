@@ -285,12 +285,10 @@ export const createCustomerOrder = async (customerId, orderData) => {
   await cart.save();
 
   // 11. Payment-Aware Direct Chef Notification:
-  // If payment method is COD, notify chef immediately
-  if (order.paymentMethod === "cod") {
-    sendDirectChefOrderNotification(order).catch((err) =>
-      console.error("[OrderService] Error sending COD chef notification:", err.message)
-    );
-  }
+  // Notify chef immediately for new orders
+  sendDirectChefOrderNotification(order).catch((err) =>
+    console.error("[OrderService] Error sending chef notification:", err.message)
+  );
 
   return { order, isExisting: false };
 };
@@ -456,6 +454,27 @@ export const cancelOrderByCustomer = async (customerId, orderId, cancellationRea
   return order;
 };
 
+// Helper to resolve possible Chef IDs (User._id and ChefProfile._id)
+const resolveChefIds = async (chefUserId) => {
+  const ids = [chefUserId];
+  try {
+    const chefProfile = await ChefProfile.findOne({
+      $or: [{ userId: chefUserId }, { _id: chefUserId }],
+    });
+    if (chefProfile) {
+      if (chefProfile._id && !ids.some((i) => i.toString() === chefProfile._id.toString())) {
+        ids.push(chefProfile._id);
+      }
+      if (chefProfile.userId && !ids.some((i) => i.toString() === chefProfile.userId.toString())) {
+        ids.push(chefProfile.userId);
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+  return ids;
+};
+
 /**
  * CHEF: Get Incoming / Assigned Orders
  */
@@ -466,9 +485,17 @@ export const getChefOrders = async (chefUserId, queryParams = {}) => {
   const limitNum = Math.min(50, Math.max(1, parseInt(limit, 10) || 10));
   const skip = (pageNum - 1) * limitNum;
 
-  const filter = { chefId: chefUserId };
-  if (status && String(status).trim() !== "") {
-    filter.orderStatus = String(status).trim();
+  const possibleChefIds = await resolveChefIds(chefUserId);
+  const filter = { chefId: { $in: possibleChefIds } };
+  if (status && String(status).trim() !== "" && String(status).trim() !== "all") {
+    const trimmedStatus = String(status).trim();
+    if (trimmedStatus === "dispatch") {
+      filter.orderStatus = {
+        $in: [ORDER_STATUSES.OUT_FOR_DELIVERY, ORDER_STATUSES.READY_FOR_PICKUP],
+      };
+    } else {
+      filter.orderStatus = trimmedStatus;
+    }
   }
 
   const totalItems = await Order.countDocuments(filter);
@@ -478,8 +505,14 @@ export const getChefOrders = async (chefUserId, queryParams = {}) => {
     .skip(skip)
     .limit(limitNum);
 
+  const formattedOrders = orders.map((order) => {
+    const obj = order.toObject ? order.toObject() : { ...order };
+    obj.status = obj.orderStatus;
+    return obj;
+  });
+
   return {
-    orders,
+    orders: formattedOrders,
     pagination: {
       currentPage: pageNum,
       totalPages: Math.ceil(totalItems / limitNum) || (totalItems === 0 ? 0 : 1),
@@ -499,7 +532,8 @@ export const getChefOrderById = async (chefUserId, orderId) => {
     throw error;
   }
 
-  const order = await Order.findOne({ _id: orderId, chefId: chefUserId }).populate(
+  const possibleChefIds = await resolveChefIds(chefUserId);
+  const order = await Order.findOne({ _id: orderId, chefId: { $in: possibleChefIds } }).populate(
     "customerId",
     "name phone email"
   );
@@ -510,7 +544,9 @@ export const getChefOrderById = async (chefUserId, orderId) => {
     throw error;
   }
 
-  return order;
+  const obj = order.toObject ? order.toObject() : { ...order };
+  obj.status = obj.orderStatus;
+  return obj;
 };
 
 /**
@@ -523,7 +559,8 @@ export const acceptOrderByChef = async (chefUserId, orderId) => {
     throw error;
   }
 
-  const order = await Order.findOne({ _id: orderId, chefId: chefUserId });
+  const possibleChefIds = await resolveChefIds(chefUserId);
+  const order = await Order.findOne({ _id: orderId, chefId: { $in: possibleChefIds } });
   if (!order) {
     const error = new Error("Order not found or does not belong to your kitchen.");
     error.statusCode = 404;
@@ -541,7 +578,7 @@ export const acceptOrderByChef = async (chefUserId, orderId) => {
 
   if (order.paymentMethod === "cod") {
     await reserveCodOrderCommissionAndFee(chefUserId, order);
-  } else if (order.paymentMethod === "online" && order.paymentId) {
+  } else if (order.paymentMethod === "online") {
     // Online orders: platform holds customer's payment; commission is settled on delivery.
     // Ensure ChefOrderSequence is updated if first order benefit applies:
     let sequence = await ChefOrderSequence.findOne({ chefId: chefUserId });
@@ -603,7 +640,9 @@ export const acceptOrderByChef = async (chefUserId, orderId) => {
     console.error("[OrderService] Error sending accepted status notification:", err.message)
   );
 
-  return order;
+  const obj = order.toObject ? order.toObject() : { ...order };
+  obj.status = obj.orderStatus;
+  return obj;
 };
 
 /**
@@ -617,7 +656,8 @@ export const rejectOrderByChef = async (chefUserId, orderId, rejectionReason) =>
     throw error;
   }
 
-  const order = await Order.findOne({ _id: orderId, chefId: chefUserId });
+  const possibleChefIds = await resolveChefIds(chefUserId);
+  const order = await Order.findOne({ _id: orderId, chefId: { $in: possibleChefIds } });
   if (!order) {
     const error = new Error("Order not found or does not belong to your kitchen.");
     error.statusCode = 404;
@@ -668,7 +708,9 @@ export const rejectOrderByChef = async (chefUserId, orderId, rejectionReason) =>
     reason: rejectionReason || "Rejected by chef",
   });
 
-  return order;
+  const obj = order.toObject ? order.toObject() : { ...order };
+  obj.status = obj.orderStatus;
+  return obj;
 };
 
 /**
@@ -681,7 +723,8 @@ export const updateChefOrderStatus = async (chefUserId, orderId, newStatus) => {
     throw error;
   }
 
-  const order = await Order.findOne({ _id: orderId, chefId: chefUserId });
+  const possibleChefIds = await resolveChefIds(chefUserId);
+  const order = await Order.findOne({ _id: orderId, chefId: { $in: possibleChefIds } });
   if (!order) {
     const error = new Error("Order not found or does not belong to your kitchen.");
     error.statusCode = 404;
@@ -701,15 +744,18 @@ export const updateChefOrderStatus = async (chefUserId, orderId, newStatus) => {
 
     // Phase 10 & Phase 9: Capture commission and confirm chef earning
     try {
+      const canonicalChefId = (await resolveChefIds(chefUserId))[0] || chefUserId;
       if (order.paymentMethod === "cod") {
-        await captureCodOrderCommissionAndFee(chefUserId, order);
+        await captureCodOrderCommissionAndFee(canonicalChefId, order);
         order.paymentStatus = "paid";
-      } else if (order.paymentMethod === "online" && order.paymentId) {
-        await settleOnlineOrderDelivery(chefUserId, order);
+        order.settlementStatus = "settled";
+      } else if (order.paymentMethod === "online") {
+        await settleOnlineOrderDelivery(canonicalChefId, order);
         order.paymentStatus = "paid";
+        order.settlementStatus = "settled";
       } else {
         // Fallback for Phase 9 orders without paymentMethod
-        const seq = await ChefOrderSequence.findOne({ chefId: chefUserId });
+        const seq = await ChefOrderSequence.findOne({ chefId: canonicalChefId });
         const isFirstOrder =
           seq &&
           seq.firstOrderId &&
@@ -718,7 +764,7 @@ export const updateChefOrderStatus = async (chefUserId, orderId, newStatus) => {
         const grossAmountPaise = Math.round(order.totalAmount * 100);
 
         const commissionResult = await captureCommission({
-          chefId: chefUserId,
+          chefId: canonicalChefId,
           orderId: order._id,
           finalBasePaise: grossAmountPaise,
           isFirstOrder: Boolean(isFirstOrder),
@@ -726,10 +772,12 @@ export const updateChefOrderStatus = async (chefUserId, orderId, newStatus) => {
         });
 
         await confirmChefEarning({
-          chefId: chefUserId,
+          chefId: canonicalChefId,
           orderId: order._id,
           commissionDeductedPaise: commissionResult?.capturedPaise || 0,
         });
+        order.paymentStatus = "paid";
+        order.settlementStatus = "settled";
       }
     } catch (earningErr) {
       console.error(
@@ -746,5 +794,7 @@ export const updateChefOrderStatus = async (chefUserId, orderId, newStatus) => {
     console.error("[OrderService] Error sending status update notification:", err.message)
   );
 
-  return order;
+  const obj = order.toObject ? order.toObject() : { ...order };
+  obj.status = obj.orderStatus;
+  return obj;
 };

@@ -5,6 +5,8 @@ import Food from "../Models/Food.js";
 import User from "../Models/User.js";
 import Payment from "../Models/Payment.js";
 import Review from "../Models/Review.js";
+import AdminWalletTransaction from "../Models/AdminWalletTransaction.js";
+import ChefProfile from "../Models/ChefProfile.js";
 import { getFinanceOverview } from "./adminFinanceService.js";
 
 /**
@@ -87,13 +89,58 @@ export async function getOrderReport({ startDate, endDate, groupBy = "day" } = {
  * 2. Revenue Report
  */
 export async function getRevenueReport({ startDate, endDate } = {}) {
-  const finance = await getFinanceOverview({ startDate, endDate });
+  const dateFilter = buildDateFilter(startDate, endDate);
+  const matchStage = dateFilter ? { createdAt: dateFilter } : {};
+
+  const [finance, timelineAgg] = await Promise.all([
+    getFinanceOverview({ startDate, endDate }),
+    AdminWalletTransaction.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          commissionPaise: {
+            $sum: {
+              $cond: [{ $eq: ["$transactionType", "commission_credit"] }, "$amountPaise", 0],
+            },
+          },
+          codFeePaise: {
+            $sum: {
+              $cond: [{ $eq: ["$transactionType", "cod_fee_credit"] }, "$amountPaise", 0],
+            },
+          },
+          promotionalExpensesPaise: {
+            $sum: {
+              $cond: [{ $eq: ["$transactionType", "promotional_discount_expense"] }, "$amountPaise", 0],
+            },
+          },
+          refundPaise: {
+            $sum: {
+              $cond: [{ $eq: ["$transactionType", "refund_debit"] }, "$amountPaise", 0],
+            },
+          },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+  ]);
+
+  const timeline = timelineAgg.map((t) => ({
+    date: t._id,
+    commissionRevenue: Number((t.commissionPaise / 100).toFixed(2)),
+    codFeeRevenue: Number((t.codFeePaise / 100).toFixed(2)),
+    promotionalExpenses: Number((t.promotionalExpensesPaise / 100).toFixed(2)),
+    refunds: Number((t.refundPaise / 100).toFixed(2)),
+    netRevenue: Number(((t.commissionPaise + t.codFeePaise - t.promotionalExpensesPaise - t.refundPaise) / 100).toFixed(2)),
+  }));
+
   return {
     period: { startDate, endDate },
     revenue: finance.platformRevenue,
     collections: finance.collections,
     refunds: finance.refunds,
     chefEarnings: finance.chefEarnings,
+    timeline,
   };
 }
 
@@ -104,69 +151,94 @@ export async function getChefReport({ startDate, endDate, limit = 20 } = {}) {
   const dateFilter = buildDateFilter(startDate, endDate);
   const matchStage = dateFilter ? { createdAt: dateFilter } : {};
 
-  const chefsAgg = await Order.aggregate([
-    { $match: matchStage },
-    {
-      $group: {
-        _id: "$chefId",
-        totalOrders: { $sum: 1 },
-        deliveredOrders: {
-          $sum: { $cond: [{ $eq: ["$orderStatus", "delivered"] }, 1, 0] },
+  const [chefsAgg, timelineAgg, statusAgg] = await Promise.all([
+    Order.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: "$chefId",
+          totalOrders: { $sum: 1 },
+          deliveredOrders: {
+            $sum: { $cond: [{ $eq: ["$orderStatus", "delivered"] }, 1, 0] },
+          },
+          cancelledOrders: {
+            $sum: { $cond: [{ $eq: ["$orderStatus", "cancelled"] }, 1, 0] },
+          },
+          rejectedOrders: {
+            $sum: { $cond: [{ $eq: ["$orderStatus", "rejected"] }, 1, 0] },
+          },
+          grossOrderValuePaise: { $sum: "$totalAmountPaise" },
         },
-        cancelledOrders: {
-          $sum: { $cond: [{ $eq: ["$orderStatus", "cancelled"] }, 1, 0] },
+      },
+      { $sort: { deliveredOrders: -1, totalOrders: -1 } },
+      { $limit: Number(limit) || 20 },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "chefUser",
         },
-        rejectedOrders: {
-          $sum: { $cond: [{ $eq: ["$orderStatus", "rejected"] }, 1, 0] },
+      },
+      { $unwind: { path: "$chefUser", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "chefprofiles",
+          localField: "_id",
+          foreignField: "userId",
+          as: "profile",
         },
-        grossOrderValuePaise: { $sum: "$totalAmountPaise" },
       },
-    },
-    { $sort: { deliveredOrders: -1, totalOrders: -1 } },
-    { $limit: Number(limit) || 20 },
-    {
-      $lookup: {
-        from: "users",
-        localField: "_id",
-        foreignField: "_id",
-        as: "chefUser",
-      },
-    },
-    { $unwind: { path: "$chefUser", preserveNullAndEmptyArrays: true } },
-    {
-      $lookup: {
-        from: "chefprofiles",
-        localField: "_id",
-        foreignField: "userId",
-        as: "profile",
-      },
-    },
-    { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
-    {
-      $project: {
-        chefId: "$_id",
-        chefName: "$chefUser.name",
-        kitchenName: "$profile.kitchenName",
-        ownerName: "$profile.ownerName",
-        city: "$profile.city",
-        totalOrders: 1,
-        deliveredOrders: 1,
-        cancelledOrders: 1,
-        rejectedOrders: 1,
-        deliverySuccessRatePercent: {
-          $cond: [
-            { $gt: ["$totalOrders", 0] },
-            { $round: [{ $multiply: [{ $divide: ["$deliveredOrders", "$totalOrders"] }, 100] }, 2] },
-            0,
-          ],
+      { $unwind: { path: "$profile", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          chefId: "$_id",
+          chefName: "$chefUser.name",
+          kitchenName: "$profile.kitchenName",
+          ownerName: "$profile.ownerName",
+          city: "$profile.city",
+          totalOrders: 1,
+          deliveredOrders: 1,
+          cancelledOrders: 1,
+          rejectedOrders: 1,
+          deliverySuccessRatePercent: {
+            $cond: [
+              { $gt: ["$totalOrders", 0] },
+              { $round: [{ $multiply: [{ $divide: ["$deliveredOrders", "$totalOrders"] }, 100] }, 2] },
+              0,
+            ],
+          },
+          grossOrderValuePaise: 1,
         },
-        grossOrderValuePaise: 1,
       },
-    },
+    ]),
+    User.aggregate([
+      { $match: { role: "chef", ...matchStage } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          registered: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    ChefProfile.aggregate([
+      {
+        $group: {
+          _id: "$approvalStatus",
+          count: { $sum: 1 },
+        },
+      },
+    ]),
   ]);
 
   return {
     topChefs: chefsAgg,
+    registrationTimeline: timelineAgg.map((t) => ({ date: t._id, registered: t.registered })),
+    statusDistribution: statusAgg.reduce((acc, curr) => {
+      acc[curr._id] = curr.count;
+      return acc;
+    }, {}),
   };
 }
 
@@ -177,7 +249,7 @@ export async function getCustomerReport({ startDate, endDate, limit = 20 } = {})
   const dateFilter = buildDateFilter(startDate, endDate);
   const matchStage = dateFilter ? { createdAt: dateFilter } : {};
 
-  const [topCustomersAgg, frequencyAgg] = await Promise.all([
+  const [topCustomersAgg, frequencyAgg, timelineAgg] = await Promise.all([
     Order.aggregate([
       { $match: matchStage },
       {
@@ -230,6 +302,16 @@ export async function getCustomerReport({ startDate, endDate, limit = 20 } = {})
         },
       },
     ]),
+    User.aggregate([
+      { $match: { role: "customer", ...matchStage } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          registered: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
   ]);
 
   return {
@@ -239,6 +321,7 @@ export async function getCustomerReport({ startDate, endDate, limit = 20 } = {})
       repeatCustomers: 0,
       singleOrderCustomers: 0,
     },
+    registrationTimeline: timelineAgg.map((t) => ({ date: t._id, registered: t.registered })),
   };
 }
 

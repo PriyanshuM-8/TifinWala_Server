@@ -17,10 +17,10 @@ import {
  */
 export const listAllChefs = async (req, res, next) => {
   try {
-    const { status, search, page, limit, sortBy, sortOrder } = req.query;
+    const { status, approvalStatus, search, page, limit, sortBy, sortOrder } = req.query;
 
     const result = await getAllChefs({
-      status,
+      status: status || approvalStatus,
       search,
       page,
       limit,

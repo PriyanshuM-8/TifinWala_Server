@@ -20,6 +20,9 @@ export const getChefEarningsWallet = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       data,
+      ...data,
+      wallet: data.balancesRupees,
+      balancesRupees: data.balancesRupees,
     });
   } catch (error) {
     next(error);
@@ -68,6 +71,9 @@ export const getChefCommissionWallet = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       data,
+      ...data,
+      commissionWallet: data.balancesRupees,
+      balancesRupees: data.balancesRupees,
     });
   } catch (error) {
     next(error);

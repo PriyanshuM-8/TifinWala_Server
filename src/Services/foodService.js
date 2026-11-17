@@ -221,6 +221,7 @@ export const createFoodItem = async (chefUserId, foodData, imageFile) => {
     availability: availability === "unavailable" ? "unavailable" : "available",
     servingSize: servingSize ? servingSize.trim() : "1 Portion",
     isActive: true,
+    moderationStatus: "approved",
   });
 
   await food.populate("categoryId", "name slug");

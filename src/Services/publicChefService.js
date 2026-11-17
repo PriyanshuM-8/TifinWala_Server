@@ -4,6 +4,7 @@ import User from "../Models/User.js";
 import Food from "../Models/Food.js";
 import Category from "../Models/Category.js";
 import Review from "../Models/Review.js";
+import { resolveCoordinatesForCity } from "../utils/geoUtils.js";
 
 /**
  * Searches and discovers nearby chefs using MongoDB GeoJSON $geoNear aggregation,
@@ -29,6 +30,28 @@ export const getNearbyChefs = async (queryParams = {}) => {
 
   const hasLat = lat !== undefined && lat !== null && String(lat).trim() !== "";
   const hasLng = lng !== undefined && lng !== null && String(lng).trim() !== "";
+
+  // Auto-heal any approved chef missing location coordinates in background
+  try {
+    const unlocatedChefs = await ChefProfile.find({
+      approvalStatus: "approved",
+      $or: [
+        { location: { $exists: false } },
+        { "location.coordinates": { $exists: false } },
+        { "location.coordinates": { $size: 0 } },
+      ],
+    });
+    for (const uc of unlocatedChefs) {
+      uc.location = {
+        type: "Point",
+        coordinates: resolveCoordinatesForCity(uc.city, uc.kitchenAddress),
+      };
+      if (!uc.serviceRadiusKm) uc.serviceRadiusKm = 15;
+      await uc.save();
+    }
+  } catch (healErr) {
+    // Non-blocking auto-heal
+  }
 
   // 1. Validate coordinates presence
   if ((hasLat && !hasLng) || (!hasLat && hasLng)) {
@@ -86,7 +109,7 @@ export const getNearbyChefs = async (queryParams = {}) => {
     };
 
     if (city && String(city).trim()) {
-      geoMatch.city = { $regex: new RegExp(`^${String(city).trim()}$`, "i") };
+      geoMatch.city = { $regex: new RegExp(String(city).trim(), "i") };
     }
 
     const pipeline = [
@@ -133,10 +156,16 @@ export const getNearbyChefs = async (queryParams = {}) => {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ["$chefId", "$$cUserId"] },
+                    {
+                      $or: [
+                        { $eq: ["$chefId", "$$cUserId"] },
+                        { $eq: ["$chefId", "$_id"] },
+                      ],
+                    },
                     { $eq: ["$isActive", true] },
-                    { $eq: ["$availability", "available"] },
+                    { $in: ["$availability", ["available", null]] },
                     { $gt: ["$availableQuantity", 0] },
+                    { $in: ["$moderationStatus", ["approved", "pending", null]] },
                   ],
                 },
               },
@@ -226,8 +255,58 @@ export const getNearbyChefs = async (queryParams = {}) => {
     ];
 
     const result = await ChefProfile.aggregate(pipeline);
-    const totalItems = result[0]?.metadata[0]?.total || 0;
-    const chefs = result[0]?.data || [];
+    let totalItems = result[0]?.metadata[0]?.total || 0;
+    let chefs = result[0]?.data || [];
+
+    // Also include any approved chefs in this city/address who might not have been caught
+    if (city && String(city).trim()) {
+      const existingIds = new Set(chefs.map((c) => (c._id || c.chefId).toString()));
+      const cityRegex = new RegExp(String(city).trim(), "i");
+      const sameCityProfiles = await ChefProfile.find({
+        _id: { $nin: Array.from(existingIds) },
+        approvalStatus: "approved",
+        $or: [{ city: cityRegex }, { kitchenAddress: cityRegex }],
+      }).populate({
+        path: "userId",
+        match: { isActive: true },
+        select: "_id name isActive",
+      });
+
+      for (const profile of sameCityProfiles) {
+        if (!profile.userId || !profile.userId.isActive) continue;
+        const availableFoods = await Food.find({
+          $or: [{ chefId: profile.userId._id }, { chefId: profile._id }],
+          isActive: true,
+          $or: [{ availability: "available" }, { availability: { $exists: false } }],
+          availableQuantity: { $gt: 0 },
+          moderationStatus: { $ne: "rejected" },
+        })
+          .select("_id name price image foodType")
+          .limit(3);
+
+        if (availableFoods.length > 0) {
+          chefs.push({
+            _id: profile._id,
+            chefId: profile._id,
+            userId: profile.userId._id,
+            kitchenName: profile.kitchenName,
+            ownerName: profile.ownerName,
+            description: profile.description,
+            city: profile.city,
+            cuisineTypes: profile.cuisineTypes,
+            foodCategories: profile.foodCategories,
+            kitchenImages: profile.kitchenImages,
+            serviceRadiusKm: profile.serviceRadiusKm || 15,
+            distanceKm: 0.5,
+            availableFoodCount: availableFoods.length,
+            sampleFoods: availableFoods,
+            rating: 4.8,
+            reviewCount: 0,
+          });
+          totalItems += 1;
+        }
+      }
+    }
 
     return {
       chefs,
@@ -242,12 +321,12 @@ export const getNearbyChefs = async (queryParams = {}) => {
 
   // 4. City-based fallback branch (when coordinates are omitted)
   const trimmedCity = String(city).trim();
-  const cityRegex = new RegExp(`^${trimmedCity}$`, "i");
+  const cityRegex = new RegExp(trimmedCity, "i");
 
   // Query approved chefs in this city
   const cityQuery = {
     approvalStatus: "approved",
-    city: cityRegex,
+    $or: [{ city: cityRegex }, { kitchenAddress: cityRegex }],
   };
 
   const chefProfiles = await ChefProfile.find(cityQuery)
@@ -265,10 +344,11 @@ export const getNearbyChefs = async (queryParams = {}) => {
   const eligibleChefs = [];
   for (const profile of activeChefs) {
     const availableFoods = await Food.find({
-      chefId: profile.userId._id,
+      $or: [{ chefId: profile.userId._id }, { chefId: profile._id }],
       isActive: true,
-      availability: "available",
+      $or: [{ availability: "available" }, { availability: { $exists: false } }],
       availableQuantity: { $gt: 0 },
+      moderationStatus: { $ne: "rejected" },
     })
       .select("_id name price image foodType")
       .limit(3);

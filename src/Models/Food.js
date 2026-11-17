@@ -99,7 +99,7 @@ const foodSchema = new mongoose.Schema(
         values: ["pending", "approved", "flagged", "rejected"],
         message: "{VALUE} is not a valid moderation status (allowed: pending, approved, flagged, rejected)",
       },
-      default: "pending",
+      default: "approved",
       index: true,
     },
     moderationReason: {

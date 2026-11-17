@@ -9,6 +9,7 @@ import ChefCommissionWallet from "../Models/ChefCommissionWallet.js";
 import ChefCommissionTransaction from "../Models/ChefCommissionTransaction.js";
 import { sendChefStatusEmail } from "./emailService.js";
 import { logAdminAction } from "./auditLogService.js";
+import { resolveCoordinatesForCity } from "../utils/geoUtils.js";
 
 /**
  * Lists all chef profiles with filtering, pagination, and multi-field search.
@@ -20,21 +21,24 @@ import { logAdminAction } from "./auditLogService.js";
  * @param {string} [options.sortBy='createdAt']
  * @param {string} [options.sortOrder='desc']
  */
-export const getAllChefs = async ({
-  status,
-  search,
-  page = 1,
-  limit = 10,
-  sortBy = "createdAt",
-  sortOrder = "desc",
-}) => {
+export const getAllChefs = async (options = {}) => {
+  const {
+    status,
+    approvalStatus,
+    search,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = options;
   const query = {};
 
+  const targetStatus = status || approvalStatus;
   // 1. Status Filter
-  if (status && status !== "all") {
+  if (targetStatus && targetStatus !== "all") {
     const validStatuses = ["pending", "approved", "rejected"];
-    if (validStatuses.includes(status.toLowerCase())) {
-      query.approvalStatus = status.toLowerCase();
+    if (validStatuses.includes(targetStatus.toLowerCase())) {
+      query.approvalStatus = targetStatus.toLowerCase();
     }
   }
 
@@ -134,7 +138,36 @@ export const approveChefApplication = async (identifier, adminUserId) => {
   profile.reviewedAt = new Date();
   profile.rejectionReason = null;
 
+  // Ensure chef has valid GeoJSON coordinates for discovery
+  if (
+    !profile.location ||
+    !Array.isArray(profile.location.coordinates) ||
+    profile.location.coordinates.length !== 2
+  ) {
+    const coords = resolveCoordinatesForCity(profile.city, profile.kitchenAddress);
+    profile.location = {
+      type: "Point",
+      coordinates: coords,
+    };
+  }
+
+  // Ensure service radius is at least 15 km
+  if (!profile.serviceRadiusKm || profile.serviceRadiusKm < 5) {
+    profile.serviceRadiusKm = 15;
+  }
+
   await profile.save();
+
+  // Ensure linked User has role: 'chef' and isActive: true
+  if (profile.userId) {
+    const chefUserId = profile.userId._id || profile.userId;
+    const chefUserDoc = await User.findById(chefUserId);
+    if (chefUserDoc) {
+      chefUserDoc.isActive = true;
+      if (chefUserDoc.role !== "chef") chefUserDoc.role = "chef";
+      await chefUserDoc.save();
+    }
+  }
 
   // Populate reviewer details
   await profile.populate("reviewedBy", "name email role");

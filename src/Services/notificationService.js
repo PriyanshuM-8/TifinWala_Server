@@ -1,4 +1,5 @@
 import InAppNotification from "../Models/InAppNotification.js";
+import ChefProfile from "../Models/ChefProfile.js";
 import { notifyUser, notifyOrder } from "../Config/socket.js";
 
 /**
@@ -52,6 +53,29 @@ export const sendDirectChefOrderNotification = async (order) => {
       ...payload,
       notificationId: notification._id,
     });
+
+    // Also notify by ChefProfile _id or userId to guarantee delivery
+    try {
+      const chefProf = await ChefProfile.findOne({
+        $or: [{ userId: order.chefId }, { _id: order.chefId }],
+      });
+      if (chefProf) {
+        if (chefProf._id && chefProf._id.toString() !== order.chefId.toString()) {
+          notifyUser(chefProf._id, "new_order", {
+            ...payload,
+            notificationId: notification._id,
+          });
+        }
+        if (chefProf.userId && chefProf.userId.toString() !== order.chefId.toString()) {
+          notifyUser(chefProf.userId, "new_order", {
+            ...payload,
+            notificationId: notification._id,
+          });
+        }
+      }
+    } catch (profErr) {
+      // Non-blocking lookup
+    }
 
     // 3. Emit to order room
     notifyOrder(order._id, "order_placed", payload);
@@ -134,6 +158,16 @@ export const sendOrderStatusNotification = async (order, newStatus, extraData = 
       message,
       notificationId: notification._id,
     });
+
+    // Notify chef's room as well
+    if (order.chefId) {
+      notifyUser(order.chefId, "order_status_updated", {
+        ...payload,
+        title,
+        message,
+        notificationId: notification._id,
+      });
+    }
 
     // 3. Real-time Socket.IO emission to the order room
     notifyOrder(order._id, "order_status_updated", {

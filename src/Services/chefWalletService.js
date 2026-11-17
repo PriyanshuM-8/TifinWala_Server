@@ -1,9 +1,13 @@
 import crypto from "crypto";
 import ChefWallet from "../Models/ChefWallet.js";
 import ChefEarning from "../Models/ChefEarning.js";
+import ChefProfile from "../Models/ChefProfile.js";
+import Order from "../Models/Order.js";
 import ChefCommissionWallet from "../Models/ChefCommissionWallet.js";
 import ChefCommissionTransaction from "../Models/ChefCommissionTransaction.js";
 import ChefOrderSequence from "../Models/ChefOrderSequence.js";
+import { settleOnlineOrderDelivery } from "./onlineSettlementService.js";
+import { captureCodOrderCommissionAndFee } from "./codSettlementService.js";
 
 /**
  * Generate unique earning number e.g. GKS-ERN-XXXXXX
@@ -13,18 +17,50 @@ const generateEarningNumber = () => {
 };
 
 /**
+ * Helper to resolve canonical User ID and all matching IDs
+ */
+const getChefIdentityIds = async (chefId) => {
+  let canonicalId = chefId;
+  const possibleIds = [chefId];
+  try {
+    const profile = await ChefProfile.findOne({
+      $or: [{ userId: chefId }, { _id: chefId }],
+    });
+    if (profile) {
+      if (profile.userId) {
+        canonicalId = profile.userId;
+        if (!possibleIds.some((id) => id.toString() === profile.userId.toString())) {
+          possibleIds.push(profile.userId);
+        }
+      }
+      if (profile._id && !possibleIds.some((id) => id.toString() === profile._id.toString())) {
+        possibleIds.push(profile._id);
+      }
+    }
+  } catch (err) {
+    // Non-blocking
+  }
+  return { canonicalId, possibleIds };
+};
+
+/**
  * Ensures ChefWallet exists.
  */
 export const getOrCreateChefWallet = async (chefId) => {
-  let wallet = await ChefWallet.findOne({ chefId });
+  const { canonicalId, possibleIds } = await getChefIdentityIds(chefId);
+
+  let wallet = await ChefWallet.findOne({ chefId: { $in: possibleIds } });
   if (!wallet) {
     wallet = await ChefWallet.create({
-      chefId,
+      chefId: canonicalId,
       pendingBalancePaise: 0,
       availableBalancePaise: 0,
       settledBalancePaise: 0,
       totalEarnedPaise: 0,
     });
+  } else if (wallet.chefId.toString() !== canonicalId.toString()) {
+    wallet.chefId = canonicalId;
+    await wallet.save();
   }
   return wallet;
 };
@@ -201,11 +237,42 @@ export const reversePendingChefEarning = async ({
  * Returns comprehensive Chef Earnings Wallet summary.
  */
 export const getChefEarningsWalletOverview = async (chefId) => {
-  const wallet = await getOrCreateChefWallet(chefId);
+  const { canonicalId, possibleIds } = await getChefIdentityIds(chefId);
 
-  // Get count of earnings by status
+  // Self-healing: Automatically settle any delivered orders that were not previously settled
+  try {
+    const unSettledDeliveredOrders = await Order.find({
+      chefId: { $in: possibleIds },
+      orderStatus: "delivered",
+      settlementStatus: { $ne: "settled" },
+    });
+
+    for (const order of unSettledDeliveredOrders) {
+      try {
+        if (order.paymentMethod === "online") {
+          await settleOnlineOrderDelivery(canonicalId, order);
+          order.paymentStatus = "paid";
+          order.settlementStatus = "settled";
+          await order.save();
+        } else if (order.paymentMethod === "cod") {
+          await captureCodOrderCommissionAndFee(canonicalId, order);
+          order.paymentStatus = "paid";
+          order.settlementStatus = "settled";
+          await order.save();
+        }
+      } catch (innerErr) {
+        // Individual settlement failure non-blocking
+      }
+    }
+  } catch (healErr) {
+    // Non-blocking auto-heal check
+  }
+
+  const wallet = await getOrCreateChefWallet(canonicalId);
+
+  // Get count of earnings by status across all possible IDs
   const [counts] = await ChefEarning.aggregate([
-    { $match: { chefId: wallet.chefId } },
+    { $match: { chefId: { $in: possibleIds } } },
     {
       $group: {
         _id: null,
@@ -225,6 +292,13 @@ export const getChefEarningsWalletOverview = async (chefId) => {
     },
   ]);
 
+  const balancesRupees = {
+    totalEarned: Number((wallet.totalEarnedPaise / 100).toFixed(2)),
+    availableBalance: Number((wallet.availableBalancePaise / 100).toFixed(2)),
+    pendingBalance: Number((wallet.pendingBalancePaise / 100).toFixed(2)),
+    settledBalance: Number((wallet.settledBalancePaise / 100).toFixed(2)),
+  };
+
   return {
     chefId: wallet.chefId,
     balancesPaise: {
@@ -233,12 +307,12 @@ export const getChefEarningsWalletOverview = async (chefId) => {
       pendingBalancePaise: wallet.pendingBalancePaise,
       settledBalancePaise: wallet.settledBalancePaise,
     },
-    balancesRupees: {
-      totalEarned: Number((wallet.totalEarnedPaise / 100).toFixed(2)),
-      availableBalance: Number((wallet.availableBalancePaise / 100).toFixed(2)),
-      pendingBalance: Number((wallet.pendingBalancePaise / 100).toFixed(2)),
-      settledBalance: Number((wallet.settledBalancePaise / 100).toFixed(2)),
-    },
+    balancesRupees,
+    wallet: balancesRupees, // Direct alias
+    availableBalance: balancesRupees.availableBalance, // Top-level shortcut
+    totalEarned: balancesRupees.totalEarned,
+    pendingBalance: balancesRupees.pendingBalance,
+    settledBalance: balancesRupees.settledBalance,
     earningsSummary: {
       pendingEarningsCount: counts?.pendingCount || 0,
       completedEarningsCount: (counts?.availableCount || 0) + (counts?.settledCount || 0),
@@ -259,7 +333,8 @@ export const getChefEarningsList = async (
   chefId,
   { status, sourceType, startDate, endDate, page = 1, limit = 20 }
 ) => {
-  const query = { chefId };
+  const { possibleIds } = await getChefIdentityIds(chefId);
+  const query = { chefId: { $in: possibleIds } };
   if (status) query.status = status;
   if (sourceType) query.sourceType = sourceType;
   if (startDate && endDate) {
@@ -285,6 +360,7 @@ export const getChefEarningsList = async (
 
   return {
     earnings,
+    transactions: earnings, // Top-level alias
     pagination: {
       total,
       page: numericPage,

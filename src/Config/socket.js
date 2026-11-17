@@ -16,15 +16,21 @@ export const initSocket = (httpServer) => {
   });
 
   io.on("connection", (socket) => {
-    // Client joins their personal user room (user_<userId>)
+    // Client joins their personal user room (user_<userId>) and chef room (chef_<userId>)
     const handleJoinUser = (userId) => {
-      if (userId) {
-        const roomName = `user_${userId.toString()}`;
-        socket.join(roomName);
-      }
+      if (!userId) return;
+      const ids = Array.isArray(userId) ? userId : [userId];
+      ids.forEach((id) => {
+        if (id) {
+          const idStr = id.toString();
+          socket.join(`user_${idStr}`);
+          socket.join(`chef_${idStr}`);
+        }
+      });
     };
     socket.on("join", handleJoinUser);
     socket.on("join_user", handleJoinUser);
+    socket.on("join_chef", handleJoinUser);
 
     // Client joins a specific order room (order_<orderId>) for live status updates
     socket.on("join_order", (orderId) => {
@@ -62,8 +68,9 @@ export const getIO = () => {
  */
 export const notifyUser = (userId, eventName, payload) => {
   if (!io || !userId) return;
-  const roomName = `user_${userId.toString()}`;
-  io.to(roomName).emit(eventName, payload);
+  const idStr = userId.toString();
+  io.to(`user_${idStr}`).emit(eventName, payload);
+  io.to(`chef_${idStr}`).emit(eventName, payload);
 };
 
 /**

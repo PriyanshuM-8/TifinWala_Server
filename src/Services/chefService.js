@@ -136,9 +136,9 @@ export const updateChefProfile = async (userId, updateData) => {
   // Check if any critical verification field has actually changed
   const hasCriticalChange = CRITICAL_VERIFICATION_FIELDS.some((field) => {
     if (updateData[field] === undefined) return false;
-    const currentVal = profile[field] || "";
-    const newVal = typeof updateData[field] === "string" ? updateData[field].trim() : updateData[field];
-    return currentVal.toString() !== newVal.toString();
+    const currentVal = (profile[field] || "").toString().trim().toLowerCase();
+    const newVal = (updateData[field] || "").toString().trim().toLowerCase();
+    return currentVal !== newVal;
   });
 
   // Re-verification Policy:

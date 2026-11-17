@@ -17,6 +17,7 @@ export const getChefOrdersHandler = async (req, res, next) => {
       success: true,
       message: "Chef orders retrieved successfully.",
       data: result.orders,
+      orders: result.orders,
       pagination: result.pagination,
     });
   } catch (error) {

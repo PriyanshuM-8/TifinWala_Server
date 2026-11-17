@@ -4,6 +4,7 @@ import User from "../Models/User.js";
 import PendingRegistration from "../Models/PendingRegistration.js";
 import ChefProfile from "../Models/ChefProfile.js";
 import { parseAndValidateChefLocation } from "./chefService.js";
+import { resolveCoordinatesForCity } from "../utils/geoUtils.js";
 import {
   generateSecureOTP,
   hashOTP,
@@ -213,10 +214,14 @@ export const chefSendOtpService = async (payload) => {
     ownerName: ownerName.trim(),
     kitchenAddress: kitchenAddress.trim(),
     city: city.trim(),
-    description: description ? description.trim() : "",
+    description: description
+      ? (Array.isArray(description) ? description[0] : description).toString().trim()
+      : "",
     foodCategories: parsedFoodCategories,
     cuisineTypes: parsedCuisineTypes,
-    foodSafetyDetails: foodSafetyDetails ? foodSafetyDetails.trim() : "",
+    foodSafetyDetails: foodSafetyDetails
+      ? (Array.isArray(foodSafetyDetails) ? foodSafetyDetails[0] : foodSafetyDetails).toString().trim()
+      : "",
     ...(optionalLocation && { location: optionalLocation }),
   };
 
@@ -280,13 +285,21 @@ export const chefVerifyOtpService = async ({ email, otp }) => {
     isActive: true,
   }).save();
 
+  const resolvedCoordinates =
+    pending.profileData?.location?.coordinates ||
+    resolveCoordinatesForCity(pending.profileData?.city, pending.profileData?.kitchenAddress);
+
   const chefProfile = await ChefProfile.create({
     userId: user._id,
     kitchenName: pending.profileData?.kitchenName || "Homemade Kitchen",
     ownerName: pending.profileData?.ownerName || pending.name,
     kitchenAddress: pending.profileData?.kitchenAddress || "Address",
     city: pending.profileData?.city || "City",
-    location: pending.profileData?.location || undefined,
+    location: {
+      type: "Point",
+      coordinates: resolvedCoordinates,
+    },
+    serviceRadiusKm: 15,
     description: pending.profileData?.description || "",
     foodCategories: pending.profileData?.foodCategories || [],
     cuisineTypes: pending.profileData?.cuisineTypes || [],

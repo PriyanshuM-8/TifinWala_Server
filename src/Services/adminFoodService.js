@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Food from "../Models/Food.js";
 import Order from "../Models/Order.js";
+import ChefProfile from "../Models/ChefProfile.js";
 import { logAdminAction } from "./auditLogService.js";
 
 /**
@@ -48,7 +49,12 @@ export async function listAllFoods({
   }
 
   if (chefId && mongoose.Types.ObjectId.isValid(chefId)) {
-    query.chefId = chefId;
+    const profile = await ChefProfile.findById(chefId);
+    if (profile && profile.userId) {
+      query.chefId = { $in: [new mongoose.Types.ObjectId(chefId), profile.userId] };
+    } else {
+      query.chefId = new mongoose.Types.ObjectId(chefId);
+    }
   }
 
   if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {

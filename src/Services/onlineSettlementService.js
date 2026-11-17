@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import ChefWallet from "../Models/ChefWallet.js";
 import ChefEarning from "../Models/ChefEarning.js";
+import ChefProfile from "../Models/ChefProfile.js";
 import ChefOrderSequence from "../Models/ChefOrderSequence.js";
 import AdminWallet from "../Models/AdminWallet.js";
 import AdminWalletTransaction from "../Models/AdminWalletTransaction.js";
@@ -22,11 +23,26 @@ export async function settleOnlineOrderDelivery(chefId, order, session = null) {
   const foodPaise = order.subtotalPaise || Math.round(order.subtotal * 100);
   const subsidyPaise = order.onlineDiscountPaise || 0;
 
+  // Resolve canonical chef User ID (avoid ChefProfile _id vs User _id mismatch)
+  let canonicalChefId = chefId;
+  try {
+    const profile = await ChefProfile.findOne({
+      $or: [{ userId: chefId }, { _id: chefId }],
+    });
+    if (profile && profile.userId) {
+      canonicalChefId = profile.userId;
+    }
+  } catch (err) {
+    // Non-blocking
+  }
+
   // Check first-order benefit
-  let sequence = await ChefOrderSequence.findOne({ chefId }).session(session);
+  let sequence = await ChefOrderSequence.findOne({
+    $or: [{ chefId: canonicalChefId }, { chefId }],
+  }).session(session);
   if (!sequence) {
     sequence = new ChefOrderSequence({
-      chefId,
+      chefId: canonicalChefId,
       acceptedOrderCount: 0,
       hasUsedFirstOrderFreeBenefit: false,
     });
@@ -45,14 +61,17 @@ export async function settleOnlineOrderDelivery(chefId, order, session = null) {
     await sequence.save({ session });
   }
 
-  const commissionPaise = isFirstOrder ? 0 : Math.round(foodPaise * config.standardCommissionRate);
+  const standardRate = config?.standardCommissionRate ?? 0.1;
+  const commissionPaise = isFirstOrder ? 0 : Math.round(foodPaise * standardRate);
   const chefNetEarningsPaise = Math.max(0, foodPaise - commissionPaise);
 
   // 1. Credit Chef Wallet (withdrawable balance)
-  let chefWallet = await ChefWallet.findOne({ chefId }).session(session);
+  let chefWallet = await ChefWallet.findOne({
+    $or: [{ chefId: canonicalChefId }, { chefId }],
+  }).session(session);
   if (!chefWallet) {
     chefWallet = new ChefWallet({
-      chefId,
+      chefId: canonicalChefId,
       pendingBalancePaise: 0,
       availableBalancePaise: 0,
       settledBalancePaise: 0,
@@ -61,16 +80,19 @@ export async function settleOnlineOrderDelivery(chefId, order, session = null) {
     });
   }
 
+  // Clear from pending balance if previously marked pending
+  chefWallet.pendingBalancePaise = Math.max(0, (chefWallet.pendingBalancePaise || 0) - foodPaise);
   chefWallet.availableBalancePaise += chefNetEarningsPaise;
   chefWallet.totalEarnedPaise += chefNetEarningsPaise;
   await chefWallet.save({ session });
 
-  // 2. Record Chef Earning
+  // 2. Record or Update Chef Earning
   let earning = await ChefEarning.findOne({ orderId: order._id }).session(session);
+  const earningDateKey = new Date().toISOString().slice(0, 10);
   if (!earning) {
     earning = new ChefEarning({
       earningNumber: `ERN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      chefId,
+      chefId: canonicalChefId,
       sourceType: "instant_order",
       orderId: order._id,
       orderNumber: order.orderNumber,
@@ -79,14 +101,19 @@ export async function settleOnlineOrderDelivery(chefId, order, session = null) {
       commissionDeductedPaise: commissionPaise,
       status: "available",
       availableAt: new Date(),
+      earningDateKey,
       idempotencyKey: `earn_onl_${order._id.toString()}`,
     });
   } else {
+    earning.chefId = canonicalChefId;
     earning.grossAmountPaise = foodPaise;
     earning.netEarningsPaise = chefNetEarningsPaise;
     earning.commissionDeductedPaise = commissionPaise;
     earning.status = "available";
     earning.availableAt = new Date();
+    if (!earning.earningDateKey) {
+      earning.earningDateKey = earningDateKey;
+    }
   }
   await earning.save({ session });
 

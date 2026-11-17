@@ -42,6 +42,7 @@ router.post("/admin/login", loginRateLimiter, adminLogin);
  * Protected Profile & Session Management
  */
 router.get("/me", protect, getMe);
+router.get("/profile", protect, getMe);
 router.post("/logout", logout);
 
 export default router;

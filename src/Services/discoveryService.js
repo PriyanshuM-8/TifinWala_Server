@@ -3,6 +3,7 @@ import Food from "../Models/Food.js";
 import Category from "../Models/Category.js";
 import User from "../Models/User.js";
 import ChefProfile from "../Models/ChefProfile.js";
+import { resolveCoordinatesForCity } from "../utils/geoUtils.js";
 
 /**
  * Validates search and filter parameters for public food discovery.
@@ -169,6 +170,28 @@ export const discoverFoods = async (queryParams = {}) => {
     String(lat).trim() !== "" &&
     String(lng).trim() !== "";
 
+  // Auto-heal any approved chef missing location coordinates
+  try {
+    const unlocatedChefs = await ChefProfile.find({
+      approvalStatus: "approved",
+      $or: [
+        { location: { $exists: false } },
+        { "location.coordinates": { $exists: false } },
+        { "location.coordinates": { $size: 0 } },
+      ],
+    });
+    for (const uc of unlocatedChefs) {
+      uc.location = {
+        type: "Point",
+        coordinates: resolveCoordinatesForCity(uc.city, uc.kitchenAddress),
+      };
+      if (!uc.serviceRadiusKm) uc.serviceRadiusKm = 15;
+      await uc.save();
+    }
+  } catch (healErr) {
+    // Non-blocking
+  }
+
   // =========================================================================
   // PATH A: DISTANCE-BASED GEOSPATIAL AGGREGATION (When lat & lng are supplied)
   // =========================================================================
@@ -177,7 +200,7 @@ export const discoverFoods = async (queryParams = {}) => {
     const lngNum = Number(lng);
     const maxDistMeters = maxDistance
       ? Math.min(100000, Number(maxDistance))
-      : 10000;
+      : 15000;
 
     // 1. Chef Profile criteria
     const chefGeoMatch = {
@@ -186,7 +209,7 @@ export const discoverFoods = async (queryParams = {}) => {
     };
 
     if (city && String(city).trim()) {
-      chefGeoMatch.city = { $regex: new RegExp(`^${String(city).trim()}$`, "i") };
+      chefGeoMatch.city = { $regex: new RegExp(String(city).trim(), "i") };
     }
 
     if (chefId && String(chefId).trim()) {
@@ -200,11 +223,16 @@ export const discoverFoods = async (queryParams = {}) => {
 
     // 2. Food matching expressions
     const foodMatchConditions = [
-      { $eq: ["$chefId", "$$chefUserId"] },
+      {
+        $or: [
+          { $eq: ["$chefId", "$$chefUserId"] },
+          { $eq: ["$chefId", "$chefDoc._id"] },
+        ],
+      },
       { $eq: ["$isActive", true] },
-      { $eq: ["$availability", "available"] },
+      { $in: ["$availability", ["available", null]] },
       { $gt: ["$availableQuantity", 0] },
-      { $in: ["$moderationStatus", ["approved", null]] },
+      { $in: ["$moderationStatus", ["approved", "pending", null]] },
     ];
 
     if (foodType && ["veg", "non_veg"].includes(foodType.toLowerCase())) {
@@ -423,7 +451,8 @@ export const discoverFoods = async (queryParams = {}) => {
   // 2. Resolve Approved & Active Chefs
   const chefFilter = { approvalStatus: "approved" };
   if (city && String(city).trim()) {
-    chefFilter.city = { $regex: new RegExp(`^${String(city).trim()}$`, "i") };
+    const cityRegex = new RegExp(String(city).trim(), "i");
+    chefFilter.$or = [{ city: cityRegex }, { kitchenAddress: cityRegex }];
   }
 
   if (chefId && String(chefId).trim()) {
@@ -474,19 +503,23 @@ export const discoverFoods = async (queryParams = {}) => {
   }
 
   const eligibleChefUserIds = eligibleProfiles.map((p) => p.userId);
+  const eligibleProfileIds = eligibleProfiles.map((p) => p._id);
+  const allEligibleChefIdentifiers = [...eligibleChefUserIds, ...eligibleProfileIds];
+
   const profileByUserId = new Map();
   eligibleProfiles.forEach((p) => {
     profileByUserId.set(p.userId.toString(), p);
+    profileByUserId.set(p._id.toString(), p);
   });
 
   // 3. Build Standard Food Query
   const foodQuery = {
     isActive: true,
-    availability: "available",
+    $or: [{ availability: "available" }, { availability: { $exists: false } }],
     availableQuantity: { $gt: 0 },
     categoryId: { $in: eligibleCategoryIds },
-    chefId: { $in: eligibleChefUserIds },
-    moderationStatus: { $in: ["approved", null] },
+    chefId: { $in: allEligibleChefIdentifiers },
+    moderationStatus: { $ne: "rejected" },
   };
 
   if (foodType && ["veg", "non_veg"].includes(foodType.toLowerCase())) {
