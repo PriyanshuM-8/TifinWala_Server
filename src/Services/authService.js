@@ -1,8 +1,8 @@
 import validator from "validator";
 import bcrypt from "bcryptjs";
-import User from "../models/User.js";
-import PendingRegistration from "../models/PendingRegistration.js";
-import ChefProfile from "../models/ChefProfile.js";
+import User from "../Models/User.js";
+import PendingRegistration from "../Models/PendingRegistration.js";
+import ChefProfile from "../Models/ChefProfile.js";
 import { parseAndValidateChefLocation } from "./chefService.js";
 import {
   generateSecureOTP,

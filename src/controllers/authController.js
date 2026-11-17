@@ -7,7 +7,7 @@ import {
   loginService,
   adminLoginService,
   getMeService,
-} from "../services/authService.js";
+} from "../Services/authService.js";
 
 const handleServiceError = (error, next) => {
   if (error.status) {
