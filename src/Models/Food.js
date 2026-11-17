@@ -93,6 +93,29 @@ const foodSchema = new mongoose.Schema(
       default: true,
       index: true,
     },
+    moderationStatus: {
+      type: String,
+      enum: {
+        values: ["pending", "approved", "flagged", "rejected"],
+        message: "{VALUE} is not a valid moderation status (allowed: pending, approved, flagged, rejected)",
+      },
+      default: "pending",
+      index: true,
+    },
+    moderationReason: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    moderatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    moderatedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -100,6 +123,7 @@ const foodSchema = new mongoose.Schema(
 );
 
 // Compound indexes for optimal public search, filtering, and ordering
+foodSchema.index({ moderationStatus: 1, isActive: 1, availability: 1 });
 foodSchema.index({ isActive: 1, availability: 1, availableQuantity: 1, categoryId: 1, price: 1 });
 foodSchema.index({ chefId: 1, isActive: 1 });
 foodSchema.index({ tags: 1, isActive: 1, availability: 1 });

@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import User from "../models/User.js";
 import PendingRegistration from "../models/PendingRegistration.js";
 import ChefProfile from "../models/ChefProfile.js";
+import { parseAndValidateChefLocation } from "./chefService.js";
 import {
   generateSecureOTP,
   hashOTP,
@@ -153,7 +154,23 @@ export const customerVerifyOtpService = async ({ email, otp }) => {
 
 // ─── Chef Send OTP ───────────────────────────────────────────────────────────
 
-export const chefSendOtpService = async ({ name, email, phone, password, confirmPassword, role, kitchenName, ownerName, kitchenAddress, city, description, foodCategories, cuisineTypes, foodSafetyDetails }) => {
+export const chefSendOtpService = async (payload) => {
+  const {
+    name,
+    email,
+    phone,
+    password,
+    confirmPassword,
+    role,
+    kitchenName,
+    ownerName,
+    kitchenAddress,
+    city,
+    description,
+    foodCategories,
+    cuisineTypes,
+    foodSafetyDetails,
+  } = payload;
   if (role && role !== "chef") throw { status: 403, message: "Invalid role specified. Role cannot be elevated." };
   if (!name || !email || !phone || !password) throw { status: 400, message: "Account details (name, email, phone, password) are all required." };
   if (!kitchenName || !ownerName || !kitchenAddress || !city) throw { status: 400, message: "Kitchen details (kitchenName, ownerName, kitchenAddress, city) are all required." };
@@ -188,6 +205,9 @@ export const chefSendOtpService = async ({ name, email, phone, password, confirm
     ? cuisineTypes.split(",").map((s) => s.trim()).filter(Boolean)
     : [];
 
+  // Parse optional location coordinates
+  const optionalLocation = parseAndValidateChefLocation(payload);
+
   const profileData = {
     kitchenName: kitchenName.trim(),
     ownerName: ownerName.trim(),
@@ -197,6 +217,7 @@ export const chefSendOtpService = async ({ name, email, phone, password, confirm
     foodCategories: parsedFoodCategories,
     cuisineTypes: parsedCuisineTypes,
     foodSafetyDetails: foodSafetyDetails ? foodSafetyDetails.trim() : "",
+    ...(optionalLocation && { location: optionalLocation }),
   };
 
   const salt = await bcrypt.genSalt(10);
@@ -265,6 +286,7 @@ export const chefVerifyOtpService = async ({ email, otp }) => {
     ownerName: pending.profileData?.ownerName || pending.name,
     kitchenAddress: pending.profileData?.kitchenAddress || "Address",
     city: pending.profileData?.city || "City",
+    location: pending.profileData?.location || undefined,
     description: pending.profileData?.description || "",
     foodCategories: pending.profileData?.foodCategories || [],
     cuisineTypes: pending.profileData?.cuisineTypes || [],

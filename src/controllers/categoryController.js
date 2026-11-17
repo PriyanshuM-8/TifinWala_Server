@@ -7,6 +7,7 @@ import {
   toggleCategoryStatus,
   deleteCategory,
 } from "../Services/categoryService.js";
+import { logAdminAction } from "../Services/auditLogService.js";
 
 /**
  * POST /api/admin/categories
@@ -104,6 +105,17 @@ export const toggleCategoryStatusHandler = async (req, res, next) => {
   try {
     const { isActive } = req.body;
     const category = await toggleCategoryStatus(req.params.id, isActive);
+
+    await logAdminAction({
+      adminId: req.user._id,
+      actionType: "category_status_change",
+      targetEntityType: "Category",
+      targetEntityId: category._id,
+      previousState: { isActive: !category.isActive },
+      newState: { isActive: category.isActive },
+      reason: `Category '${category.name}' status toggled to ${category.isActive ? "active" : "inactive"}.`,
+    });
+
     return res.status(200).json({
       success: true,
       message: `Category is now ${category.isActive ? "active" : "inactive"}.`,

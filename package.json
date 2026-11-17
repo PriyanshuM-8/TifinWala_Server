@@ -10,7 +10,9 @@
     "seed:admin": "node src/scripts/createAdmin.js",
     "test:phase2": "node testPhase2.js",
     "test:phase3": "node testPhase3.js",
-    "test:phase4": "node testPhase4.js"
+    "test:phase4": "node testPhase4.js",
+    "test:phase5": "node --env-file=.env testPhase5.js",
+    "test:phase6": "node --env-file=.env testPhase6.js"
   },
   "keywords": [],
   "type": "module",
@@ -26,6 +28,8 @@
     "mongoose": "^9.12.0",
     "multer": "^2.5.0",
     "nodemailer": "^10.4.0",
+    "razorpay": "^2.9.8",
+    "socket.io": "^4.8.4",
     "validator": "^13.15.35"
   },
   "devDependencies": {

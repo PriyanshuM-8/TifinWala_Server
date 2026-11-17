@@ -1,7 +1,67 @@
 import ChefProfile from "../Models/ChefProfile.js";
 
+/**
+ * Validates and normalizes GeoJSON Point location for chef kitchen.
+ * Coordinates must follow standard [longitude, latitude] order.
+ */
+export const parseAndValidateChefLocation = (data) => {
+  let coords = null;
+
+  if (data.location) {
+    if (Array.isArray(data.location.coordinates)) {
+      coords = data.location.coordinates;
+    } else if (
+      data.location.longitude !== undefined &&
+      data.location.latitude !== undefined
+    ) {
+      coords = [data.location.longitude, data.location.latitude];
+    } else if (data.location.lng !== undefined && data.location.lat !== undefined) {
+      coords = [data.location.lng, data.location.lat];
+    }
+  } else if (Array.isArray(data.coordinates)) {
+    coords = data.coordinates;
+  } else if (data.longitude !== undefined && data.latitude !== undefined) {
+    coords = [data.longitude, data.latitude];
+  } else if (data.lng !== undefined && data.lat !== undefined) {
+    coords = [data.lng, data.lat];
+  }
+
+  // Location is optional
+  if (coords === null || coords === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(coords) || coords.length !== 2) {
+    const error = new Error("Invalid coordinates format: Must be [longitude, latitude].");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const longitude = Number(coords[0]);
+  const latitude = Number(coords[1]);
+
+  if (isNaN(longitude) || isNaN(latitude)) {
+    const error = new Error("Invalid coordinates: Longitude and latitude must be valid numbers.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
+    const error = new Error(
+      "Invalid coordinates: Longitude must be between -180 and 180, and latitude between -90 and 90."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    type: "Point",
+    coordinates: [longitude, latitude],
+  };
+};
+
 // Fields that require safety/identity re-verification if changed by an already approved chef
-const CRITICAL_VERIFICATION_FIELDS = [
+export const CRITICAL_VERIFICATION_FIELDS = [
   "kitchenName",
   "ownerName",
   "kitchenAddress",
@@ -10,7 +70,7 @@ const CRITICAL_VERIFICATION_FIELDS = [
 ];
 
 // All allowed editable fields
-const ALLOWED_UPDATE_FIELDS = [
+export const ALLOWED_UPDATE_FIELDS = [
   "kitchenName",
   "ownerName",
   "kitchenAddress",
@@ -20,6 +80,7 @@ const ALLOWED_UPDATE_FIELDS = [
   "cuisineTypes",
   "foodSafetyDetails",
   "kitchenImages",
+  "serviceRadiusKm",
 ];
 
 /**
@@ -114,6 +175,23 @@ export const updateChefProfile = async (userId, updateData) => {
       }
     }
   });
+
+  // Handle serviceRadiusKm update safely with validation
+  if (updateData.serviceRadiusKm !== undefined) {
+    const radiusNum = Number(updateData.serviceRadiusKm);
+    if (isNaN(radiusNum) || radiusNum < 1 || radiusNum > 50) {
+      const error = new Error("Invalid service radius: Must be a number between 1 KM and 50 KM.");
+      error.statusCode = 400;
+      throw error;
+    }
+    profile.serviceRadiusKm = radiusNum;
+  }
+
+  // Handle GeoJSON Location updates safely
+  const parsedLocation = parseAndValidateChefLocation(updateData);
+  if (parsedLocation !== undefined) {
+    profile.location = parsedLocation;
+  }
 
   await profile.save();
 

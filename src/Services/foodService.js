@@ -613,6 +613,7 @@ export const getPublicFoods = async (queryParams = {}) => {
     availableQuantity: { $gt: 0 }, // Out-of-stock items hidden
     chefId: { $in: eligibleChefIds },
     categoryId: { $in: eligibleCategoryIds },
+    moderationStatus: { $in: ["approved", null] }, // Phase 11: Only approved or legacy foods visible
   };
 
   // Chef filter
@@ -752,6 +753,7 @@ export const getPublicFoodById = async (foodId) => {
     _id: foodId,
     isActive: true,
     availability: "available",
+    moderationStatus: { $in: ["approved", null] },
   }).populate("categoryId", "name slug isActive");
 
   if (!food || !food.categoryId || !food.categoryId.isActive) {

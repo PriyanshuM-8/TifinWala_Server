@@ -1,7 +1,14 @@
 import mongoose from "mongoose";
 import ChefProfile from "../Models/ChefProfile.js";
 import User from "../Models/User.js";
+import Food from "../Models/Food.js";
+import Order from "../Models/Order.js";
+import ChefEarning from "../Models/ChefEarning.js";
+import ChefWallet from "../Models/ChefWallet.js";
+import ChefCommissionWallet from "../Models/ChefCommissionWallet.js";
+import ChefCommissionTransaction from "../Models/ChefCommissionTransaction.js";
 import { sendChefStatusEmail } from "./emailService.js";
+import { logAdminAction } from "./auditLogService.js";
 
 /**
  * Lists all chef profiles with filtering, pagination, and multi-field search.
@@ -132,6 +139,17 @@ export const approveChefApplication = async (identifier, adminUserId) => {
   // Populate reviewer details
   await profile.populate("reviewedBy", "name email role");
 
+  // Record audit log
+  await logAdminAction({
+    adminId: adminUserId,
+    actionType: "chef_approval",
+    targetEntityType: "ChefProfile",
+    targetEntityId: profile._id,
+    previousState: { approvalStatus: "pending" },
+    newState: { approvalStatus: "approved" },
+    reason: `Chef '${profile.kitchenName}' application approved.`,
+  });
+
   // Dispatch asynchronous status email to chef
   const chefUser = profile.userId;
   if (chefUser && chefUser.email) {
@@ -187,6 +205,17 @@ export const rejectChefApplication = async (identifier, adminUserId, rejectionRe
 
   await profile.populate("reviewedBy", "name email role");
 
+  // Record audit log
+  await logAdminAction({
+    adminId: adminUserId,
+    actionType: "chef_rejection",
+    targetEntityType: "ChefProfile",
+    targetEntityId: profile._id,
+    previousState: { approvalStatus: "pending" },
+    newState: { approvalStatus: "rejected", rejectionReason: profile.rejectionReason },
+    reason: `Chef '${profile.kitchenName}' application rejected: ${profile.rejectionReason}`,
+  });
+
   // Dispatch asynchronous status email to chef
   const chefUser = profile.userId;
   if (chefUser && chefUser.email) {
@@ -204,5 +233,220 @@ export const rejectChefApplication = async (identifier, adminUserId, rejectionRe
   return {
     profile,
     message: `Chef application for '${profile.kitchenName}' has been rejected. Notification dispatched with feedback.`,
+  };
+};
+
+/**
+ * ADMIN: Suspend or reactivate a chef account.
+ * Updates User.isActive, hides dishes if suspended, and preserves all wallet balances.
+ */
+export const updateChefStatus = async (identifier, adminUserId, { isActive, reason }) => {
+  if (isActive === undefined) {
+    const error = new Error("isActive boolean is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!reason || typeof reason !== "string" || reason.trim().length < 3) {
+    const error = new Error("Reason for chef status change must be at least 3 characters.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const profile = await getChefById(identifier);
+  const chefUserId = profile.userId._id || profile.userId;
+
+  const chefUser = await User.findById(chefUserId);
+  if (!chefUser) {
+    const error = new Error("Associated chef user account not found.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const previousState = {
+    isActive: chefUser.isActive,
+  };
+
+  chefUser.isActive = Boolean(isActive);
+  await chefUser.save();
+
+  const newState = {
+    isActive: chefUser.isActive,
+  };
+
+  // Record audit log
+  await logAdminAction({
+    adminId: adminUserId,
+    actionType: "chef_status_change",
+    targetEntityType: "ChefProfile",
+    targetEntityId: profile._id,
+    previousState,
+    newState,
+    reason: `Chef '${profile.kitchenName}' account ${chefUser.isActive ? "reactivated" : "suspended"}. Reason: ${reason.trim()}`,
+  });
+
+  return {
+    profile,
+    chefUser,
+    message: `Chef '${profile.kitchenName}' has been ${chefUser.isActive ? "reactivated" : "suspended"} successfully.`,
+  };
+};
+
+/**
+ * ADMIN: Returns paginated orders for a chef.
+ */
+export const getChefOrders = async (identifier, { page = 1, limit = 10, orderStatus }) => {
+  const profile = await getChefById(identifier);
+  const chefUserId = profile.userId._id || profile.userId;
+
+  const numericPage = Math.max(1, parseInt(page, 10) || 1);
+  const numericLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 10));
+  const skip = (numericPage - 1) * numericLimit;
+
+  const query = { chefId: chefUserId };
+  if (orderStatus) query.orderStatus = orderStatus;
+
+  const [totalRecords, orders] = await Promise.all([
+    Order.countDocuments(query),
+    Order.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(numericLimit)
+      .populate("customerId", "name email phone")
+      .lean(),
+  ]);
+
+  return {
+    totalRecords,
+    page: numericPage,
+    limit: numericLimit,
+    totalPages: Math.ceil(totalRecords / numericLimit) || 1,
+    orders,
+  };
+};
+
+/**
+ * ADMIN: Returns all foods created by a chef.
+ */
+export const getChefFoods = async (identifier, { page = 1, limit = 20 }) => {
+  const profile = await getChefById(identifier);
+  const chefUserId = profile.userId._id || profile.userId;
+
+  const numericPage = Math.max(1, parseInt(page, 10) || 1);
+  const numericLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+  const skip = (numericPage - 1) * numericLimit;
+
+  const query = { chefId: chefUserId };
+
+  const [totalRecords, foods] = await Promise.all([
+    Food.countDocuments(query),
+    Food.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(numericLimit)
+      .populate("categoryId", "name description")
+      .lean(),
+  ]);
+
+  return {
+    totalRecords,
+    page: numericPage,
+    limit: numericLimit,
+    totalPages: Math.ceil(totalRecords / numericLimit) || 1,
+    foods,
+  };
+};
+
+/**
+ * ADMIN: Returns paginated earnings records for a chef.
+ */
+export const getChefEarnings = async (identifier, { page = 1, limit = 20, status }) => {
+  const profile = await getChefById(identifier);
+  const chefUserId = profile.userId._id || profile.userId;
+
+  const numericPage = Math.max(1, parseInt(page, 10) || 1);
+  const numericLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+  const skip = (numericPage - 1) * numericLimit;
+
+  const query = { chefId: chefUserId };
+  if (status) query.status = status;
+
+  const [totalRecords, earnings] = await Promise.all([
+    ChefEarning.countDocuments(query),
+    ChefEarning.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(numericLimit)
+      .lean(),
+  ]);
+
+  return {
+    totalRecords,
+    page: numericPage,
+    limit: numericLimit,
+    totalPages: Math.ceil(totalRecords / numericLimit) || 1,
+    earnings,
+  };
+};
+
+/**
+ * ADMIN: Returns chef earnings wallet and commission wallet overview.
+ */
+export const getChefWalletsOverview = async (identifier) => {
+  const profile = await getChefById(identifier);
+  const chefUserId = profile.userId._id || profile.userId;
+
+  const [earningsWallet, commissionWallet] = await Promise.all([
+    ChefWallet.findOne({ chefId: chefUserId }).lean(),
+    ChefCommissionWallet.findOne({ chefId: chefUserId }).lean(),
+  ]);
+
+  return {
+    chefId: chefUserId,
+    kitchenName: profile.kitchenName,
+    earningsWallet: earningsWallet || {
+      availableBalancePaise: 0,
+      pendingBalancePaise: 0,
+      settledBalancePaise: 0,
+      totalEarnedPaise: 0,
+      reservedWithdrawalBalancePaise: 0,
+    },
+    commissionWallet: commissionWallet || {
+      balancePaise: 0,
+      availableBalancePaise: 0,
+      reservedBalancePaise: 0,
+      totalCommissionPaidPaise: 0,
+    },
+  };
+};
+
+/**
+ * ADMIN: Returns commission transactions for a chef.
+ */
+export const getChefCommissionTransactions = async (identifier, { page = 1, limit = 20 }) => {
+  const profile = await getChefById(identifier);
+  const chefUserId = profile.userId._id || profile.userId;
+
+  const numericPage = Math.max(1, parseInt(page, 10) || 1);
+  const numericLimit = Math.min(50, Math.max(1, parseInt(limit, 10) || 20));
+  const skip = (numericPage - 1) * numericLimit;
+
+  const query = { chefId: chefUserId };
+
+  const [totalRecords, transactions] = await Promise.all([
+    ChefCommissionTransaction.countDocuments(query),
+    ChefCommissionTransaction.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(numericLimit)
+      .lean(),
+  ]);
+
+  return {
+    totalRecords,
+    page: numericPage,
+    limit: numericLimit,
+    totalPages: Math.ceil(totalRecords / numericLimit) || 1,
+    transactions,
   };
 };
