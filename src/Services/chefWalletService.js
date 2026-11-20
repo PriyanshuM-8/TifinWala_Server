@@ -43,6 +43,11 @@ const getChefIdentityIds = async (chefId) => {
   return { canonicalId, possibleIds };
 };
 
+const resolveChefIds = async (chefId) => {
+  const { possibleIds } = await getChefIdentityIds(chefId);
+  return possibleIds;
+};
+
 /**
  * Ensures ChefWallet exists.
  */
@@ -392,9 +397,10 @@ export const getChefEarningById = async (chefId, earningId) => {
  * Returns chef commission wallet details including sequence and ₹50 minimum balance status.
  */
 export const getChefCommissionWalletOverview = async (chefId) => {
+  const possibleChefIds = await resolveChefIds(chefId);
   const [wallet, sequence] = await Promise.all([
-    ChefCommissionWallet.findOne({ chefId }),
-    ChefOrderSequence.findOne({ chefId }),
+    ChefCommissionWallet.findOne({ chefId: { $in: possibleChefIds } }),
+    ChefOrderSequence.findOne({ chefId: { $in: possibleChefIds } }),
   ]);
 
   const balancePaise = wallet?.balancePaise || 0;
@@ -441,17 +447,18 @@ export const getChefCommissionTransactions = async (
   chefId,
   { page = 1, limit = 20 }
 ) => {
+  const possibleChefIds = await resolveChefIds(chefId);
   const numericPage = Math.max(1, parseInt(page, 10) || 1);
   const numericLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
   const skip = (numericPage - 1) * numericLimit;
 
   const [transactions, total] = await Promise.all([
-    ChefCommissionTransaction.find({ chefId })
+    ChefCommissionTransaction.find({ chefId: { $in: possibleChefIds } })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(numericLimit)
       .lean(),
-    ChefCommissionTransaction.countDocuments({ chefId }),
+    ChefCommissionTransaction.countDocuments({ chefId: { $in: possibleChefIds } }),
   ]);
 
   return {

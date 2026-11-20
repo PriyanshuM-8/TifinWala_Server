@@ -8,6 +8,8 @@ import {
   getPromotionalExpensesBreakdownHandler,
   listAllRefundsHandler,
   getRefundDetailsHandler,
+  getFinanceAnalyticsHandler,
+  reconcileLedgerHandler,
 } from "../controllers/adminFinanceController.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { authorizeRoles } from "../middleware/roleMiddleware.js";
@@ -17,6 +19,8 @@ const router = express.Router();
 router.use(protect, authorizeRoles("admin"));
 
 router.get("/overview", getFinanceOverviewHandler);
+router.get("/analytics", getFinanceAnalyticsHandler);
+router.post("/reconcile-ledger", reconcileLedgerHandler);
 router.get("/transactions", getFinanceTransactionsHandler);
 router.get("/commission", getCommissionBreakdownHandler);
 router.get("/cod-fees", getCodFeeBreakdownHandler);

@@ -4,6 +4,7 @@ import Order from "../Models/Order.js";
 import Subscription from "../Models/Subscription.js";
 import ChefCommissionWallet from "../Models/ChefCommissionWallet.js";
 import ChefCommissionTransaction from "../Models/ChefCommissionTransaction.js";
+import ChefProfile from "../Models/ChefProfile.js";
 import { getPlatformConfig } from "./platformConfigService.js";
 import {
   createGatewayOrder,
@@ -249,15 +250,51 @@ export async function initiateSubscriptionPayment(customerId, subscriptionId) {
  */
 export async function verifyAndCompletePayment(
   customerId,
-  { paymentId, razorpayOrderId, razorpayPaymentId, razorpaySignature }
+  payload = {}
 ) {
+  const paymentId = payload.paymentId;
+  const razorpayOrderId = payload.razorpayOrderId || payload.razorpay_order_id;
+  const razorpayPaymentId = payload.razorpayPaymentId || payload.razorpay_payment_id;
+  const razorpaySignature = payload.razorpaySignature || payload.razorpay_signature;
+
   if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
     const err = new Error("razorpayOrderId, razorpayPaymentId, and razorpaySignature are required.");
     err.statusCode = 400;
     throw err;
   }
 
-  const query = paymentId ? { _id: paymentId, customerId } : { razorpayOrderId, customerId };
+  let possibleUserIds = [customerId];
+  if (customerId) {
+    try {
+      const profile = await ChefProfile.findOne({
+        $or: [{ userId: customerId }, { _id: customerId }],
+      });
+      if (profile) {
+        if (profile.userId && !possibleUserIds.some((id) => id.toString() === profile.userId.toString())) {
+          possibleUserIds.push(profile.userId);
+        }
+        if (profile._id && !possibleUserIds.some((id) => id.toString() === profile._id.toString())) {
+          possibleUserIds.push(profile._id);
+        }
+      }
+    } catch {}
+  }
+
+  let query = {
+    $or: [
+      { customerId: { $in: possibleUserIds } },
+      { chefId: { $in: possibleUserIds } },
+    ],
+  };
+
+  if (razorpayOrderId) {
+    query.razorpayOrderId = razorpayOrderId;
+  } else if (paymentId && mongoose.Types.ObjectId.isValid(paymentId)) {
+    query._id = paymentId;
+  } else if (paymentId) {
+    query.razorpayPaymentId = paymentId;
+  }
+
   const payment = await Payment.findOne(query);
   if (!payment) {
     const err = new Error("Payment record not found.");
@@ -389,7 +426,12 @@ export async function initiateCommissionRecharge(chefId, amountRupees) {
     paymentId: payment._id,
     paymentNumber: payment.paymentNumber,
     razorpayOrderId: gatewayOrder?.id || null,
-    keyId: process.env.RAZORPAY_KEY_ID || "rzp_test_gharkaswad_demo123",
+    order: {
+      id: gatewayOrder?.id || null,
+      amount: amountPaise,
+      currency: "INR",
+    },
+    keyId: process.env.RAZORPAY_KEY_ID || "rzp_test_SXLkXgEKxGfXla",
     amountPaise,
     amountRupees: parsedAmount,
     currency: "INR",
@@ -399,10 +441,12 @@ export async function initiateCommissionRecharge(chefId, amountRupees) {
 /**
  * CHEF: Verify Commission Wallet Recharge
  */
-export async function verifyCommissionRecharge(
-  chefId,
-  { paymentId, razorpayOrderId, razorpayPaymentId, razorpaySignature }
-) {
+export async function verifyCommissionRecharge(chefId, payload = {}) {
+  const paymentId = payload.paymentId;
+  const razorpayOrderId = payload.razorpayOrderId || payload.razorpay_order_id;
+  const razorpayPaymentId = payload.razorpayPaymentId || payload.razorpay_payment_id;
+  const razorpaySignature = payload.razorpaySignature || payload.razorpay_signature;
+
   return verifyAndCompletePayment(chefId, {
     paymentId,
     razorpayOrderId,
@@ -415,10 +459,26 @@ export async function verifyCommissionRecharge(
  * Internal helper to credit Chef Commission Wallet after recharge payment
  */
 export async function applyCommissionWalletRecharge(chefId, amountPaise, paymentId = null, session = null) {
-  let wallet = await ChefCommissionWallet.findOne({ chefId }).session(session);
+  // Resolve possible chef IDs (both User._id and ChefProfile._id)
+  let possibleChefIds = [chefId];
+  try {
+    const profile = await ChefProfile.findOne({
+      $or: [{ userId: chefId }, { _id: chefId }],
+    }).session(session);
+    if (profile) {
+      if (profile.userId && !possibleChefIds.some((i) => i.toString() === profile.userId.toString())) {
+        possibleChefIds.push(profile.userId);
+      }
+      if (profile._id && !possibleChefIds.some((i) => i.toString() === profile._id.toString())) {
+        possibleChefIds.push(profile._id);
+      }
+    }
+  } catch {}
+
+  let wallet = await ChefCommissionWallet.findOne({ chefId: { $in: possibleChefIds } }).session(session);
   if (!wallet) {
     wallet = new ChefCommissionWallet({
-      chefId,
+      chefId: possibleChefIds[0] || chefId,
       balancePaise: 0,
       availableBalancePaise: 0,
       reservedBalancePaise: 0,
@@ -431,7 +491,7 @@ export async function applyCommissionWalletRecharge(chefId, amountPaise, payment
 
   const tx = new ChefCommissionTransaction({
     transactionNumber: generateTxNumber("CC-RCG"),
-    chefId,
+    chefId: wallet.chefId,
     commissionWalletId: wallet._id,
     transactionType: "recharge_credit",
     amountPaise,

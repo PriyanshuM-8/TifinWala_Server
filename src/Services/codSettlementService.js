@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import ChefCommissionWallet from "../Models/ChefCommissionWallet.js";
 import ChefCommissionTransaction from "../Models/ChefCommissionTransaction.js";
 import ChefOrderSequence from "../Models/ChefOrderSequence.js";
+import ChefProfile from "../Models/ChefProfile.js";
 import AdminWallet from "../Models/AdminWallet.js";
 import AdminWalletTransaction from "../Models/AdminWalletTransaction.js";
 import ChefEarning from "../Models/ChefEarning.js";
@@ -10,6 +11,24 @@ import { getPlatformConfig } from "./platformConfigService.js";
 const generateTxNumber = (prefix = "COD") => {
   return `${prefix}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
 };
+
+async function resolveChefIds(chefId) {
+  const ids = [chefId];
+  try {
+    const profile = await ChefProfile.findOne({
+      $or: [{ userId: chefId }, { _id: chefId }],
+    });
+    if (profile) {
+      if (profile.userId && !ids.some((i) => i.toString() === profile.userId.toString())) {
+        ids.push(profile.userId);
+      }
+      if (profile._id && !ids.some((i) => i.toString() === profile._id.toString())) {
+        ids.push(profile._id);
+      }
+    }
+  } catch {}
+  return ids;
+}
 
 /**
  * Checks whether the chef's commission wallet has enough available balance to accept a COD order.
@@ -20,8 +39,9 @@ export async function validateCodAcceptanceEligibility(chefId, foodAndDeliveryPa
   const minReservePaise = config.minimumCommissionWalletBalancePaise; // 5000 paise (₹50)
   const codFeePaise = config.codFeePaise; // 2000 paise (₹20)
 
-  // Check first-order benefit
-  let sequence = await ChefOrderSequence.findOne({ chefId });
+  // Check first-order benefit across both userId and chefProfile._id
+  const possibleChefIds = await resolveChefIds(chefId);
+  let sequence = await ChefOrderSequence.findOne({ chefId: { $in: possibleChefIds } });
   const isFirstOrder = !sequence || !sequence.hasUsedFirstOrderFreeBenefit;
 
   const estimatedCommissionPaise = isFirstOrder
@@ -30,7 +50,7 @@ export async function validateCodAcceptanceEligibility(chefId, foodAndDeliveryPa
 
   const requiredBalancePaise = minReservePaise + estimatedCommissionPaise + codFeePaise;
 
-  let wallet = await ChefCommissionWallet.findOne({ chefId });
+  let wallet = await ChefCommissionWallet.findOne({ chefId: { $in: possibleChefIds } });
   const currentAvailablePaise = wallet ? wallet.availableBalancePaise : 0;
 
   if (currentAvailablePaise < requiredBalancePaise) {
@@ -41,7 +61,7 @@ export async function validateCodAcceptanceEligibility(chefId, foodAndDeliveryPa
         estimatedCommissionPaise / 100
       ).toFixed(2)} + COD Fee ₹${(codFeePaise / 100).toFixed(2)}). Current available balance: ₹${(
         currentAvailablePaise / 100
-      ).toFixed(2)}.`
+      ).toFixed(2)}. Please recharge your commission wallet to accept COD orders.`
     );
     error.statusCode = 400;
     error.code = "INSUFFICIENT_COD_COMMISSION_BALANCE";
@@ -65,13 +85,14 @@ export async function validateCodAcceptanceEligibility(chefId, foodAndDeliveryPa
  * Atomically reserves commission and COD fee from ChefCommissionWallet upon COD order acceptance.
  */
 export async function reserveCodOrderCommissionAndFee(chefId, order, session = null) {
+  const possibleChefIds = await resolveChefIds(chefId);
   const foodPaise = order.subtotalPaise || Math.round(order.subtotal * 100);
   const eligibility = await validateCodAcceptanceEligibility(chefId, foodPaise);
 
-  let wallet = await ChefCommissionWallet.findOne({ chefId }).session(session);
+  let wallet = await ChefCommissionWallet.findOne({ chefId: { $in: possibleChefIds } }).session(session);
   if (!wallet) {
     wallet = new ChefCommissionWallet({
-      chefId,
+      chefId: possibleChefIds[0] || chefId,
       balancePaise: 0,
       availableBalancePaise: 0,
       reservedBalancePaise: 0,
@@ -79,10 +100,10 @@ export async function reserveCodOrderCommissionAndFee(chefId, order, session = n
   }
 
   // Handle first order sequence benefit consumption
-  let sequence = await ChefOrderSequence.findOne({ chefId }).session(session);
+  let sequence = await ChefOrderSequence.findOne({ chefId: { $in: possibleChefIds } }).session(session);
   if (!sequence) {
     sequence = new ChefOrderSequence({
-      chefId,
+      chefId: possibleChefIds[0] || chefId,
       acceptedOrderCount: 0,
       hasUsedFirstOrderFreeBenefit: false,
     });
@@ -160,7 +181,8 @@ export async function reserveCodOrderCommissionAndFee(chefId, order, session = n
  * and records the chef's earning as 'cash_settled' (zero addition to withdrawable balance).
  */
 export async function captureCodOrderCommissionAndFee(chefId, order, session = null) {
-  let wallet = await ChefCommissionWallet.findOne({ chefId }).session(session);
+  const possibleChefIds = await resolveChefIds(chefId);
+  let wallet = await ChefCommissionWallet.findOne({ chefId: { $in: possibleChefIds } }).session(session);
   if (!wallet) return;
 
   // Locate the reservations
@@ -321,7 +343,8 @@ export async function captureCodOrderCommissionAndFee(chefId, order, session = n
  * Releases reserved commission and COD fee if COD order is cancelled or rejected before delivery.
  */
 export async function releaseCodOrderCommissionAndFee(chefId, order, session = null) {
-  let wallet = await ChefCommissionWallet.findOne({ chefId }).session(session);
+  const possibleChefIds = await resolveChefIds(chefId);
+  let wallet = await ChefCommissionWallet.findOne({ chefId: { $in: possibleChefIds } }).session(session);
   if (!wallet) return;
 
   const [commReserveTx, codFeeReserveTx] = await Promise.all([

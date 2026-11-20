@@ -38,6 +38,18 @@ const adminWalletSchema = new mongoose.Schema(
       default: 0,
       min: [0, "Total promotional discount expense cannot be negative"],
     },
+    reservedWithdrawalPaise: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: [0, "Reserved withdrawal cannot be negative"],
+    },
+    totalWithdrawnPaise: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: [0, "Total withdrawn cannot be negative"],
+    },
   },
   {
     timestamps: true,
@@ -64,6 +76,14 @@ adminWalletSchema.virtual("availableBalance").get(function () {
 
 adminWalletSchema.virtual("settledBalance").get(function () {
   return Number(((this.settledBalancePaise || 0) / 100).toFixed(2));
+});
+
+adminWalletSchema.virtual("reservedWithdrawal").get(function () {
+  return Number(((this.reservedWithdrawalPaise || 0) / 100).toFixed(2));
+});
+
+adminWalletSchema.virtual("totalWithdrawn").get(function () {
+  return Number(((this.totalWithdrawnPaise || 0) / 100).toFixed(2));
 });
 
 const AdminWallet =

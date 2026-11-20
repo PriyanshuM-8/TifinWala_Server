@@ -29,6 +29,10 @@ const adminWalletTransactionSchema = new mongoose.Schema(
         "refund_debit",
         "admin_settlement",
         "admin_adjustment",
+        "admin_withdrawal_reserve",
+        "admin_withdrawal_capture",
+        "admin_withdrawal_release",
+        "admin_payout_fee",
       ],
       required: true,
       index: true,
@@ -50,6 +54,11 @@ const adminWalletTransactionSchema = new mongoose.Schema(
     subscriptionMealOrderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SubscriptionMealOrder",
+    },
+    adminWithdrawalId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AdminWithdrawal",
+      index: true,
     },
     description: {
       type: String,

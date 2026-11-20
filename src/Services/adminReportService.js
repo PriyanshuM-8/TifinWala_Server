@@ -7,6 +7,7 @@ import Payment from "../Models/Payment.js";
 import Review from "../Models/Review.js";
 import AdminWalletTransaction from "../Models/AdminWalletTransaction.js";
 import ChefProfile from "../Models/ChefProfile.js";
+import ChefEarning from "../Models/ChefEarning.js";
 import { getFinanceOverview } from "./adminFinanceService.js";
 
 /**
@@ -92,7 +93,7 @@ export async function getRevenueReport({ startDate, endDate } = {}) {
   const dateFilter = buildDateFilter(startDate, endDate);
   const matchStage = dateFilter ? { createdAt: dateFilter } : {};
 
-  const [finance, timelineAgg] = await Promise.all([
+  const [finance, timelineAgg, orderTimelineAgg, chefTimelineAgg] = await Promise.all([
     getFinanceOverview({ startDate, endDate }),
     AdminWalletTransaction.aggregate([
       { $match: matchStage },
@@ -123,21 +124,65 @@ export async function getRevenueReport({ startDate, endDate } = {}) {
       },
       { $sort: { _id: 1 } },
     ]),
+    Order.aggregate([
+      { $match: { ...matchStage, orderStatus: { $ne: "cancelled" } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          grossCollectionsPaise: { $sum: "$totalAmountPaise" },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    ChefEarning.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          netEarningsPaise: { $sum: "$netEarningsPaise" },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
   ]);
 
-  const timeline = timelineAgg.map((t) => ({
-    date: t._id,
-    commissionRevenue: Number((t.commissionPaise / 100).toFixed(2)),
-    codFeeRevenue: Number((t.codFeePaise / 100).toFixed(2)),
-    promotionalExpenses: Number((t.promotionalExpensesPaise / 100).toFixed(2)),
-    refunds: Number((t.refundPaise / 100).toFixed(2)),
-    netRevenue: Number(((t.commissionPaise + t.codFeePaise - t.promotionalExpensesPaise - t.refundPaise) / 100).toFixed(2)),
-  }));
+  // Merge daily timelines
+  const dateMap = {};
+
+  orderTimelineAgg.forEach((o) => {
+    if (!dateMap[o._id]) dateMap[o._id] = { date: o._id, grossRevenue: 0, platformCommission: 0, chefPayouts: 0, commissionRevenue: 0, codFeeRevenue: 0, promotionalExpenses: 0, refunds: 0, netRevenue: 0 };
+    dateMap[o._id].grossRevenue = Number((o.grossCollectionsPaise / 100).toFixed(2));
+  });
+
+  chefTimelineAgg.forEach((c) => {
+    if (!dateMap[c._id]) dateMap[c._id] = { date: c._id, grossRevenue: 0, platformCommission: 0, chefPayouts: 0, commissionRevenue: 0, codFeeRevenue: 0, promotionalExpenses: 0, refunds: 0, netRevenue: 0 };
+    dateMap[c._id].chefPayouts = Number((c.netEarningsPaise / 100).toFixed(2));
+  });
+
+  timelineAgg.forEach((t) => {
+    if (!dateMap[t._id]) dateMap[t._id] = { date: t._id, grossRevenue: 0, platformCommission: 0, chefPayouts: 0, commissionRevenue: 0, codFeeRevenue: 0, promotionalExpenses: 0, refunds: 0, netRevenue: 0 };
+    const comm = Number((t.commissionPaise / 100).toFixed(2));
+    const cod = Number((t.codFeePaise / 100).toFixed(2));
+    const disc = Number((t.promotionalExpensesPaise / 100).toFixed(2));
+    const ref = Number((t.refundPaise / 100).toFixed(2));
+    const grossComm = Number((comm + cod).toFixed(2));
+    const net = Number(Math.max(0, grossComm - disc - ref).toFixed(2));
+
+    dateMap[t._id].commissionRevenue = comm;
+    dateMap[t._id].codFeeRevenue = cod;
+    dateMap[t._id].platformCommission = grossComm;
+    dateMap[t._id].promotionalExpenses = disc;
+    dateMap[t._id].refunds = ref;
+    dateMap[t._id].netRevenue = net;
+  });
+
+  const timeline = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
 
   return {
     period: { startDate, endDate },
     revenue: finance.platformRevenue,
     collections: finance.collections,
+    platformExpenses: finance.platformExpenses,
     refunds: finance.refunds,
     chefEarnings: finance.chefEarnings,
     timeline,

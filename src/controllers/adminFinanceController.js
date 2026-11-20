@@ -7,6 +7,8 @@ import {
   getPromotionalExpensesBreakdown,
   listAllRefunds,
   getRefundDetails,
+  getFinanceAnalytics,
+  reconcileAndBackfillAdminLedger,
 } from "../Services/adminFinanceService.js";
 
 /**
@@ -151,6 +153,40 @@ export async function getRefundDetailsHandler(req, res, next) {
     return res.status(200).json({
       success: true,
       refund,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * GET /api/admin/finance/analytics
+ */
+export async function getFinanceAnalyticsHandler(req, res, next) {
+  try {
+    const { days, startDate, endDate } = req.query;
+    const analytics = await getFinanceAnalytics({ days, startDate, endDate });
+
+    return res.status(200).json({
+      success: true,
+      ...analytics,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * POST /api/admin/finance/reconcile-ledger
+ */
+export async function reconcileLedgerHandler(req, res, next) {
+  try {
+    const result = await reconcileAndBackfillAdminLedger();
+
+    return res.status(200).json({
+      success: true,
+      message: "Admin financial ledger successfully reconciled and backfilled.",
+      ...result,
     });
   } catch (error) {
     next(error);
