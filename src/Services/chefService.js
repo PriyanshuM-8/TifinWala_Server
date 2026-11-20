@@ -31,6 +31,16 @@ export const parseAndValidateChefLocation = (data) => {
     return undefined;
   }
 
+  // If empty or nullish coordinates array passed in update payload, ignore location update
+  if (Array.isArray(coords)) {
+    if (
+      coords.length === 0 ||
+      coords.every((c) => c === null || c === undefined || c === "" || Number.isNaN(Number(c)))
+    ) {
+      return undefined;
+    }
+  }
+
   if (!Array.isArray(coords) || coords.length !== 2) {
     const error = new Error("Invalid coordinates format: Must be [longitude, latitude].");
     error.statusCode = 400;
@@ -41,9 +51,7 @@ export const parseAndValidateChefLocation = (data) => {
   const latitude = Number(coords[1]);
 
   if (isNaN(longitude) || isNaN(latitude)) {
-    const error = new Error("Invalid coordinates: Longitude and latitude must be valid numbers.");
-    error.statusCode = 400;
-    throw error;
+    return undefined;
   }
 
   if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
@@ -128,6 +136,26 @@ export const updateChefProfile = async (userId, updateData) => {
     );
     error.statusCode = 403;
     throw error;
+  }
+
+  // Normalize foodSafetyDetails if passed as object, array, or string
+  if (updateData.foodSafetyDetails !== undefined) {
+    if (
+      typeof updateData.foodSafetyDetails === "object" &&
+      updateData.foodSafetyDetails !== null &&
+      !Array.isArray(updateData.foodSafetyDetails)
+    ) {
+      updateData.foodSafetyDetails = (
+        updateData.foodSafetyDetails.fssaiLicenseNumber ||
+        updateData.foodSafetyDetails.licenseNumber ||
+        updateData.foodSafetyDetails.number ||
+        ""
+      ).toString().trim();
+    } else if (Array.isArray(updateData.foodSafetyDetails)) {
+      updateData.foodSafetyDetails = (updateData.foodSafetyDetails[0] || "").toString().trim();
+    } else if (typeof updateData.foodSafetyDetails === "string") {
+      updateData.foodSafetyDetails = updateData.foodSafetyDetails.trim();
+    }
   }
 
   let statusChangedToPending = false;

@@ -1,6 +1,5 @@
 import nodemailer from "nodemailer";
-// Brevo imports preserved for commented reference
-// import { BREVO_CONFIG, getBrevoHeaders } from "../Config/brevo.js";
+import { BREVO_CONFIG, getBrevoHeaders } from "../Config/brevo.js";
 
 /**
  * Builds the responsive HTML template for GharKaSwad verification email.
@@ -422,7 +421,8 @@ export const sendChefStatusEmail = async ({
 };
 
 /**
- * Supports Gmail directly or any custom SMTP provider (Brevo SMTP, Hostinger, Mailgun, etc.).
+ * Supports Gmail directly or any custom SMTP provider (Brevo SMTP, Hostinger, Mailgun, etc.)
+ * with explicit network timeouts to prevent hanging indefinitely on cloud hosts.
  */
 export const createTransporter = () => {
   const service = process.env.SMTP_SERVICE;
@@ -437,6 +437,9 @@ export const createTransporter = () => {
     return nodemailer.createTransport({
       service: "gmail",
       auth: { user, pass },
+      connectionTimeout: 10000, // 10 seconds timeout for host connection
+      greetingTimeout: 7000,    // 7 seconds timeout for server greeting
+      socketTimeout: 15000,     // 15 seconds timeout for socket operations
     });
   }
 
@@ -446,6 +449,9 @@ export const createTransporter = () => {
     port,
     secure,
     auth: { user, pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 7000,
+    socketTimeout: 15000,
     tls: {
       rejectUnauthorized: false,
     },
@@ -453,71 +459,21 @@ export const createTransporter = () => {
 };
 
 /**
- * Sends a transactional verification email containing a 6-digit OTP using Nodemailer.
- *
- * @param {object} params
- * @param {string} params.email - Recipient email
- * @param {string} params.name - Recipient name
- * @param {string} params.otp - Six digit OTP string
- * @param {string} params.accountType - 'customer' | 'chef'
- * @returns {Promise<object>}
+ * Sends transactional email via Brevo REST API over HTTPS (port 443).
+ * Ideal for cloud hosts (Render, AWS, Railway) where outbound SMTP ports 25/587 are blocked.
  */
-export const sendOtpEmail = async ({ email, name, otp, accountType = "customer" }) => {
-  const fromName = process.env.SMTP_FROM_NAME || "GharKaSwad";
-  const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || "noreply@gharkaswad.com";
-  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
-  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
-
-  // Development check if SMTP credentials are missing
-  if (!smtpUser || !smtpPass || smtpPass.includes("your_password")) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        `[EmailService:Development Mode] SMTP_USER or SMTP_PASS is not configured in .env. Mocking OTP dispatch for: ${email}`
-      );
-      return { success: true, mocked: true, message: "Mock OTP email sent in development mode" };
-    } else {
-      throw new Error("SMTP_USER and SMTP_PASS must be configured in environment variables");
-    }
-  }
-
-  const subject = `GharKaSwad - Verify Your ${
-    accountType === "chef" ? "Chef Partner" : "Customer"
-  } Account`;
-
-  const htmlContent = buildOtpEmailTemplate({ name, otp, accountType });
-
-  // -------------------------------------------------------------
-  // [ACTIVE: NODEMAILER EMAIL DISPATCH]
-  // -------------------------------------------------------------
-  try {
-    const transporter = createTransporter();
-
-    const mailOptions = {
-      from: `"${fromName}" <${fromEmail}>`,
-      to: email.trim().toLowerCase(),
-      subject,
-      html: htmlContent,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`[EmailService] OTP email sent successfully to ${email} (MessageId: ${info.messageId})`);
-
-    return {
-      success: true,
-      messageId: info.messageId,
-    };
-  } catch (error) {
-    console.error("[EmailService] Failed to send email via Nodemailer:", error.message);
-    throw new Error(`Email delivery error: ${error.message}`);
-  }
-
-  /*
-  // -------------------------------------------------------------
-  // [PRESERVED: BREVO REST API IMPLEMENTATION (COMMENTED OUT)]
-  // -------------------------------------------------------------
-  const senderEmail = (process.env.BREVO_SENDER_EMAIL || BREVO_CONFIG.DEFAULT_SENDER_EMAIL).trim();
-  const senderName = (process.env.BREVO_SENDER_NAME || BREVO_CONFIG.DEFAULT_SENDER_NAME).trim();
-  const apiKey = (process.env.BREVO_API_KEY || "").trim();
+export const sendViaBrevoApi = async ({ toEmail, toName, subject, htmlContent }) => {
+  const senderEmail = (
+    process.env.BREVO_SENDER_EMAIL ||
+    process.env.SMTP_FROM_EMAIL ||
+    process.env.SMTP_USER ||
+    BREVO_CONFIG.DEFAULT_SENDER_EMAIL
+  ).trim();
+  const senderName = (
+    process.env.BREVO_SENDER_NAME ||
+    process.env.SMTP_FROM_NAME ||
+    BREVO_CONFIG.DEFAULT_SENDER_NAME
+  ).trim();
 
   const payload = {
     sender: {
@@ -526,8 +482,8 @@ export const sendOtpEmail = async ({ email, name, otp, accountType = "customer" 
     },
     to: [
       {
-        email: email.trim().toLowerCase(),
-        name: name.trim(),
+        email: toEmail.trim().toLowerCase(),
+        name: (toName || toEmail).trim(),
       },
     ],
     subject,
@@ -536,7 +492,7 @@ export const sendOtpEmail = async ({ email, name, otp, accountType = "customer" 
 
   const headers = getBrevoHeaders();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), BREVO_CONFIG.TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), BREVO_CONFIG.TIMEOUT_MS || 10000);
 
   try {
     const response = await fetch(BREVO_CONFIG.API_URL, {
@@ -551,17 +507,134 @@ export const sendOtpEmail = async ({ email, name, otp, accountType = "customer" 
 
     if (!response.ok) {
       const errorMessage =
-        responseData?.message || `Brevo API returned status ${response.status}: ${response.statusText}`;
+        responseData?.message ||
+        `Brevo API returned status ${response.status}: ${response.statusText}`;
       throw new Error(`Email delivery service error: ${errorMessage}`);
     }
+
+    console.log(
+      `[EmailService] OTP email dispatched via Brevo HTTPS API to ${toEmail} (MessageId: ${responseData?.messageId})`
+    );
 
     return {
       success: true,
       messageId: responseData?.messageId,
+      provider: "brevo",
     };
   } catch (error) {
     clearTimeout(timeoutId);
     throw error;
   }
-  */
+};
+
+/**
+ * Sends a transactional verification email containing a 6-digit OTP.
+ * Supports primary Nodemailer SMTP with automatic Brevo HTTPS REST API fallback on cloud environments.
+ *
+ * @param {object} params
+ * @param {string} params.email - Recipient email
+ * @param {string} params.name - Recipient name
+ * @param {string} params.otp - Six digit OTP string
+ * @param {string} params.accountType - 'customer' | 'chef'
+ * @returns {Promise<object>}
+ */
+export const sendOtpEmail = async ({ email, name, otp, accountType = "customer" }) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const fromName = process.env.SMTP_FROM_NAME || "GharKaSwad";
+  const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || "noreply@gharkaswad.com";
+  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+  const brevoApiKey = (process.env.BREVO_API_KEY || "").trim();
+
+  const subject = `GharKaSwad - Verify Your ${
+    accountType === "chef" ? "Chef Partner" : "Customer"
+  } Account`;
+
+  const htmlContent = buildOtpEmailTemplate({ name, otp, accountType });
+
+  // Always log OTP to server console in non-production for rapid debugging & test resilience
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[EmailService] Generated OTP for ${normalizedEmail}: [ ${otp} ]`);
+  }
+
+  // 1. Try Nodemailer if SMTP credentials are provided
+  if (smtpUser && smtpPass && !smtpPass.includes("your_password")) {
+    try {
+      const transporter = createTransporter();
+
+      const mailOptions = {
+        from: `"${fromName}" <${fromEmail}>`,
+        to: normalizedEmail,
+        subject,
+        html: htmlContent,
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log(
+        `[EmailService] OTP email sent successfully to ${normalizedEmail} (MessageId: ${info.messageId})`
+      );
+
+      return {
+        success: true,
+        messageId: info.messageId,
+        provider: "nodemailer",
+      };
+    } catch (nodemailerError) {
+      console.warn(
+        `[EmailService] Nodemailer dispatch failed for ${normalizedEmail}: ${nodemailerError.message}. Attempting fallback...`
+      );
+
+      // If Brevo API key is available, fallback to Brevo HTTPS API
+      if (brevoApiKey && !brevoApiKey.includes("your_key")) {
+        try {
+          return await sendViaBrevoApi({
+            toEmail: normalizedEmail,
+            toName: name,
+            subject,
+            htmlContent,
+          });
+        } catch (brevoError) {
+          console.error(`[EmailService] Brevo API fallback also failed: ${brevoError.message}`);
+        }
+      }
+
+      // In non-production, return mocked success so developer/tester is not blocked
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(
+          `[EmailService:Development Mode] Email dispatch failed on host. Console OTP fallback active: [ ${otp} ]`
+        );
+        return { success: true, mocked: true, message: "Mock OTP logged to server console" };
+      }
+
+      throw new Error(`Email delivery error: ${nodemailerError.message}`);
+    }
+  }
+
+  // 2. If SMTP is not configured but Brevo API is available
+  if (brevoApiKey && !brevoApiKey.includes("your_key")) {
+    try {
+      return await sendViaBrevoApi({
+        toEmail: normalizedEmail,
+        toName: name,
+        subject,
+        htmlContent,
+      });
+    } catch (brevoError) {
+      console.error(`[EmailService] Brevo API dispatch failed: ${brevoError.message}`);
+      if (process.env.NODE_ENV !== "production") {
+        return { success: true, mocked: true };
+      }
+      throw new Error(`Email delivery error: ${brevoError.message}`);
+    }
+  }
+
+  // 3. Fallback for local development if neither provider is configured
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(
+      `[EmailService:Development Mode] SMTP and Brevo credentials not configured. OTP for ${normalizedEmail}: [ ${otp} ]`
+    );
+    return { success: true, mocked: true, message: "Mock OTP email sent in development mode" };
+  } else {
+    throw new Error("SMTP or Brevo credentials must be configured in environment variables for email delivery.");
+  }
 };

@@ -45,8 +45,8 @@ import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
 
 const app = express();
 
-// Trust proxy for rate limiting & real IP detection (OTP, auth routes)
-app.set('trust proxy', 1);
+// Trust proxy for rate limiting & real IP detection across hosted environments (Render, Railway, Cloudflare, AWS)
+app.set('trust proxy', true);
 
 // Standard middleware
 app.use(cors());
